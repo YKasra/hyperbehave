@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "hyperbehave: gambling-like behavioural signatures in on-chain perpetual futures trading"
+authors:
+  - family-names: Yaraei
+    given-names: Kasra
+version: 0.1.0
+date-released: 2026-10-21
+license: MIT
+repository-code: "https://github.com/YKasra/hyperbehave"
+keywords:
+  - behavioral addiction
+  - problematic trading
+  - gambling disorder
+  - cryptocurrency
+  - Hyperliquid

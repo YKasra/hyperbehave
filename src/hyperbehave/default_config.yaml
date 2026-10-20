@@ -1,0 +1,45 @@
+# Default study configuration.
+# Every threshold here is a pre-registration candidate: keep the defaults for the
+# main analysis and vary them only in the sensitivity checks.
+
+study:
+  # Coins treated as "majors". Everything else counts as a lottery-like asset.
+  major_coins: [BTC, ETH, SOL]
+  # Coin used as the market proxy for volatility events.
+  market_proxy: BTC
+
+markers:
+  loss_chasing:
+    reentry_window_min: 60        # new position opened within N minutes after a close
+    min_events: 5                 # minimum losses AND gains needed to compute the index
+  liquidation:
+    redeposit_window_h: 24        # deposit within N hours after a liquidation
+  sessions:
+    gap_min: 30                   # fills closer than N minutes belong to one session
+  rest_window:
+    width_h: 5                    # length of the quietest daily window ("sleep proxy")
+    no_rest_threshold: 0.02       # quietest window holds more than this share -> no rest
+  loss_streak:
+    min_streak: 3                 # consecutive losing round trips that define a streak
+  relapse:
+    break_days: 14                # inactivity gap that counts as a break
+    before_days: 30               # size baseline window before the break
+    after_days: 7                 # size window after the return
+  volatility:
+    window_h: 2                   # look-ahead window after a market shock
+    shock_quantile: 0.99          # absolute hourly return quantile that defines a shock
+
+filters:
+  min_fills: 50                   # wallets with fewer fills are excluded
+  bot_maker_share: 0.90           # maker share above this ...
+  bot_fills_per_day: 200          # ... combined with this many fills per active day -> bot
+  bot_median_gap_s: 2.0           # median inter-fill gap below this (and many fills) -> bot
+  bot_min_fills_for_gap_rule: 1000
+  bot_hour_coverage: 0.90         # active in more than this share of the 168 week-hours -> bot
+
+api:
+  base_url: https://api.hyperliquid.xyz/info
+  ws_url: wss://api.hyperliquid.xyz/ws
+  min_interval_s: 1.0             # politeness delay between requests
+  max_retries: 5
+  page_limit_fills: 2000          # Hyperliquid returns at most 2000 fills per call
