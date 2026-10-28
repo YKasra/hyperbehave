@@ -35,8 +35,8 @@ def cmd_harvest(args) -> None:
     from hyperbehave.ingest.harvest import harvest_addresses
 
     cfg = load_config(args.config)
-    n = harvest_addresses(args.coins, args.minutes, args.out, cfg["api"]["ws_url"])
-    print(f"{n} distinct addresses in {args.out}")
+    print(f"Listening for {args.minutes:g} min. Progress every 30 s; Ctrl+C stops and saves.")
+    harvest_addresses(args.coins, args.minutes, args.out, cfg["api"]["ws_url"])
 
 
 def cmd_fetch(args) -> None:

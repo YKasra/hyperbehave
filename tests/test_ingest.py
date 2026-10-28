@@ -66,3 +66,16 @@ def test_storage_roundtrip_and_pseudonym(tmp_path):
     save_wallet(tmp_path, "0xABC", data)
     assert load_wallet(tmp_path, "0xabc")["fills"] == [{"time": 1}]
     assert wallet_id("0xABC", "s") == wallet_id("0xabc", "s") != wallet_id("0xabc", "t")
+
+
+def test_harvest_counts_roundtrip(tmp_path):
+    from collections import Counter
+
+    from hyperbehave.ingest.harvest import load_counts, save_counts
+
+    path = tmp_path / "a.csv"
+    save_counts(Counter({"0x" + "1" * 40: 3}), path)
+    c = load_counts(path)
+    c.update(["0x" + "1" * 40, "0x" + "2" * 40])
+    save_counts(c, path)
+    assert load_counts(path) == Counter({"0x" + "1" * 40: 4, "0x" + "2" * 40: 1})
