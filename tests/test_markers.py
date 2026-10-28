@@ -70,3 +70,41 @@ def test_markers_separate_programmed_gambler(synth, cfg):
 def test_empty_wallet_does_not_crash(cfg):
     row = wallet_features("0x" + "0" * 40, {"fills": [], "ledger": [], "funding": []}, cfg)
     assert row["exclude"]
+
+
+def _human_sweeper_fills(n_orders=1500):
+    """A human placing a market order every ~3 minutes, each sweeping 3 resting orders."""
+    from tests.conftest import fill
+
+    rows, pos = [], 0.0
+    for k in range(n_orders):
+        t = k * 180_000 + (k % 7) * 1000
+        side = "B" if pos <= 0 else "A"
+        for j in range(3):
+            f = fill(t, "BTC", side, 1, 100, pos, tid=k * 10 + j, d="Open Long" if side == "B" else "Close Long")
+            f["oid"] = k
+            rows.append(f)
+            pos += 1 if side == "B" else -1
+    return rows
+
+
+def test_human_order_sweeps_not_flagged_as_bot(cfg):
+    from hyperbehave.filters import bot_flags
+    from hyperbehave.normalize import fills_to_frame
+
+    flags = bot_flags(fills_to_frame(_human_sweeper_fills()), cfg)
+    assert "machine-speed" not in flags["reason"]
+    assert flags["median_order_gap_s"] > 100
+
+
+def test_harm_uses_window_capital_and_detects_missing_flows():
+    # Lifetime deposit of 10,000 two years ago; 1,000 of balance when the window opens;
+    # a 500 loss inside the window. Loss must be measured against 1,000, not 10,000.
+    bal = pd.DataFrame({"time": [0, 50, 100, 200], "delta": [10_000, -9_000, 0, -500],
+                        "balance": [10_000, 1_000, 1_000, 500], "trading_pnl": [0, 0, 0, -500]})
+    ledger = pd.DataFrame({"time": [0, 50], "flow": [10_000.0, -9_000.0]})
+    out = mk.harm(bal, ledger, window_start=100)
+    assert out["capital_at_risk"] == 1_000 and out["loss_to_capital"] == 0.5
+    broken = bal.assign(balance=[10_000, 1_000, -2_000, -2_500])
+    out = mk.harm(broken, ledger, window_start=100)
+    assert out["balance_consistent"] == 0.0 and np.isnan(out["loss_to_capital"])

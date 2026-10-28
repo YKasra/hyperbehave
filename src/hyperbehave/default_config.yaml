@@ -3,8 +3,9 @@
 # main analysis and vary them only in the sensitivity checks.
 
 study:
-  # Coins treated as "majors". Everything else counts as a lottery-like asset.
-  major_coins: [BTC, ETH, SOL]
+  # Coins treated as "majors" (large, liquid). Everything else counts as a lottery-like
+  # asset. HYPE is the exchange's own token and among its most traded markets.
+  major_coins: [BTC, ETH, SOL, HYPE, XRP, BNB]
   # Coin used as the market proxy for volatility events.
   market_proxy: BTC
 
@@ -33,8 +34,8 @@ filters:
   min_fills: 50                   # wallets with fewer fills are excluded
   bot_maker_share: 0.90           # maker share above this ...
   bot_fills_per_day: 200          # ... combined with this many fills per active day -> bot
-  bot_median_gap_s: 2.0           # median inter-fill gap below this (and many fills) -> bot
-  bot_min_fills_for_gap_rule: 1000
+  bot_median_gap_s: 2.0           # median gap between orders below this (and many orders) -> bot
+  bot_min_fills_for_gap_rule: 1000  # minimum number of orders for the speed rule
   bot_hour_coverage: 0.90         # active in more than this share of the 168 week-hours -> bot
 
 api:

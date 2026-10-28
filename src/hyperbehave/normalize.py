@@ -87,18 +87,48 @@ def fills_to_frame(fills: list[dict[str, Any]], address: str | None = None) -> p
     return df[FILL_COLUMNS].reset_index(drop=True)
 
 
+def _usdc_amount(delta: dict[str, Any]) -> float:
+    """USDC value of a ledger delta, whichever field the event type uses.
+
+    ``deposit``, ``withdraw`` and transfers use ``usdc``; ``send`` uses ``usdcValue`` or
+    ``amount`` (with ``token``).
+    """
+    for key in ("usdc", "usdcValue"):
+        if key in delta:
+            v = _f(delta[key])
+            if np.isfinite(v):
+                return v
+    if "amount" in delta and str(delta.get("token", "USDC")).upper().startswith("USDC"):
+        v = _f(delta["amount"])
+        if np.isfinite(v):
+            return v
+    return 0.0
+
+
 def _ledger_flow(delta: dict[str, Any], address: str | None) -> tuple[float, bool]:
-    """Signed USDC flow into the perp trading account, and whether it is external money."""
+    """Signed USDC flow into the **perp** trading account, and whether it is external money.
+
+    Spot-only movements (``spotTransfer``, ``send`` to or from the spot side) do not
+    change perp margin, so they count as zero here. Moving USDC between the wallet's own
+    spot and perp sides (``accountClassTransfer``) does change perp margin.
+    """
     kind = delta.get("type")
-    usdc = _f(delta.get("usdc", 0))
-    if np.isnan(usdc):
-        usdc = 0.0
+    usdc = _usdc_amount(delta)
     addr = address.lower() if address else None
     if kind == "deposit":
         return usdc, True
     if kind == "withdraw":
         return -usdc, True
-    if kind in ("internalTransfer", "subAccountTransfer", "spotTransfer", "send"):
+    if kind == "spotTransfer":
+        return 0.0, True
+    if kind == "send":
+        dest = str(delta.get("destination", "")).lower()
+        incoming = addr is not None and dest == addr
+        dex = delta.get("destinationDex" if incoming else "sourceDex", "")
+        if dex not in ("", None):  # "spot" or another dex: not the default perp account
+            return 0.0, True
+        return (usdc if incoming else -usdc), True
+    if kind in ("internalTransfer", "subAccountTransfer"):
         dest = str(delta.get("destination", "")).lower()
         incoming = addr is not None and dest == addr
         return (usdc if incoming else -usdc), True

@@ -70,10 +70,10 @@ MARKERS: list[MarkerSpec] = [
                "Position size after returning from a break / before it", "higher"),
     MarkerSpec("lottery_share", "Gambling-like asset choice",
                "Share of traded notional outside the major coins", "higher"),
-    MarkerSpec("loss_to_inflow", "Harm, jeopardised finances",
-               "Net trading loss / money put in (0 when profitable)", "higher"),
+    MarkerSpec("loss_to_capital", "Harm, jeopardised finances",
+               "Net trading loss in the window / capital at risk (balance at window start + money added; 0 when profitable)", "higher"),
     MarkerSpec("max_drawdown_rel", "Harm, jeopardised finances",
-               "Max drawdown of cumulative trading PnL / money put in", "higher"),
+               "Max drawdown of cumulative trading PnL in the window / capital at risk", "higher"),
 ]
 
 CORE_MARKERS = [
@@ -84,7 +84,7 @@ CORE_MARKERS = [
     "rest_window_share",
     "sessions_per_active_day",
     "doubling_down_share",
-    "loss_to_inflow",
+    "loss_to_capital",
 ]
 
 
@@ -236,11 +236,14 @@ def session_markers(fills: pd.DataFrame, sess: pd.DataFrame, trips: pd.DataFrame
 def time_of_day(fills: pd.DataFrame, width_h: int = 5, no_rest_threshold: float = 0.02) -> dict[str, float]:
     """Rest-window and weekly-spread markers, measured on deliberate actions.
 
-    Only opening fills count (``dir`` starting with "Open"): a stop-loss or liquidation
-    that fires at 3 am is not a decision to trade at 3 am. Falls back to all fills when
-    the ``dir`` field is missing.
+    Uses active orders (taker orders, one row per order) that open or add to a position:
+    a resting limit order or a stop that fills at 3 am is not a decision to trade at
+    3 am. Falls back to all active orders when there are too few opening ones.
     """
+    from hyperbehave.reconstruct import active_orders
+
     out = {"rest_window_share": NAN, "no_rest": NAN, "hour_week_entropy": NAN}
+    fills = active_orders(fills)
     opens = fills[fills["dir"].astype(str).str.startswith("Open")]
     if len(opens) >= 20:
         fills = opens
@@ -325,23 +328,52 @@ def lottery_share(fills: pd.DataFrame, majors: list[str]) -> float:
 
 
 # ----------------------------------------------------------------------- harm
-def harm(balance: pd.DataFrame, ledger: pd.DataFrame) -> dict[str, float]:
-    out = {"net_trading_pnl": NAN, "total_inflow": NAN, "total_outflow": NAN,
-           "withdraw_deposit_ratio": NAN, "loss_to_inflow": NAN, "max_drawdown_usd": NAN,
-           "max_drawdown_rel": NAN}
+def harm(balance: pd.DataFrame, ledger: pd.DataFrame, window_start: int | None = None) -> dict[str, float]:
+    """Financial harm within the study window, relative to the money at stake.
+
+    Capital at risk = realised balance when the window opens + money added during the
+    window. Using lifetime deposits instead would mix a 90-day loss with years of
+    history. ``balance_consistent`` is False when the reconstructed balance goes clearly
+    negative, which means some money flows are missing from the public ledger (for
+    example funds moved in through a channel the ledger does not show). Callers should
+    then discard balance-based markers for that wallet.
+    """
+    out = {"net_trading_pnl": NAN, "start_balance": NAN, "window_inflow": NAN,
+           "window_outflow": NAN, "capital_at_risk": NAN, "withdraw_deposit_ratio": NAN,
+           "loss_to_capital": NAN, "max_drawdown_usd": NAN, "max_drawdown_rel": NAN,
+           "balance_consistent": NAN}
     if balance.empty:
         return out
-    pnl = balance["trading_pnl"].to_numpy(dtype=float)
-    curve = np.r_[0.0, pnl]
+    if window_start is None:
+        window_start = int(balance["time"].min())
+    before = balance.loc[balance["time"] < window_start, "balance"]
+    start_bal = float(before.iloc[-1]) if len(before) else 0.0
+    inside = balance.loc[balance["time"] >= window_start]
+    if not ledger.empty:
+        lw = ledger.loc[ledger["time"] >= window_start, "flow"]
+        inflow, outflow = float(lw[lw > 0].sum()), float(-lw[lw < 0].sum())
+    else:
+        inflow = outflow = 0.0
+    capital = max(start_bal, 0.0) + inflow
+
+    # Cumulative trading result since the window opened (pre-window rows hold only
+    # ledger flows, but subtract their trading_pnl anyway to be exact).
+    pre = balance.loc[balance["time"] < window_start, "trading_pnl"]
+    base = float(pre.iloc[-1]) if len(pre) else 0.0
+    curve = np.r_[0.0, inside["trading_pnl"].to_numpy(dtype=float) - base]
     dd = float(np.max(np.maximum.accumulate(curve) - curve))
-    net = float(pnl[-1])
-    inflow = float(ledger.loc[ledger["flow"] > 0, "flow"].sum()) if not ledger.empty else 0.0
-    outflow = float(-ledger.loc[ledger["flow"] < 0, "flow"].sum()) if not ledger.empty else 0.0
-    out.update(net_trading_pnl=net, total_inflow=inflow, total_outflow=outflow, max_drawdown_usd=dd)
-    if inflow > 0:
-        out["withdraw_deposit_ratio"] = outflow / inflow
-        out["loss_to_inflow"] = max(-net, 0.0) / inflow
-        out["max_drawdown_rel"] = dd / inflow
+    net = float(curve[-1])
+    min_bal = float(inside["balance"].min()) if len(inside) else start_bal
+    consistent = min_bal >= -max(10.0, 0.05 * capital)
+
+    out.update(net_trading_pnl=net, start_balance=start_bal, window_inflow=inflow,
+               window_outflow=outflow, capital_at_risk=capital, max_drawdown_usd=dd,
+               balance_consistent=float(consistent))
+    if capital > 0 and consistent:
+        out["loss_to_capital"] = max(-net, 0.0) / capital
+        out["max_drawdown_rel"] = dd / capital
+        if inflow > 0:
+            out["withdraw_deposit_ratio"] = outflow / inflow
     return out
 
 

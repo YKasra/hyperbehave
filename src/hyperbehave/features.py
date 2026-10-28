@@ -17,6 +17,7 @@ from hyperbehave.normalize import (
     realised_balance_from_state,
 )
 from hyperbehave.reconstruct import (
+    active_orders,
     balance_curve,
     exposure_series,
     liquidation_times,
@@ -54,7 +55,9 @@ def wallet_features(
         return row
 
     trips = round_trips(fills)
-    sess = sessions(fills, m["sessions"]["gap_min"])
+    # Sessions are built from the trader's own actions (taker orders), not from resting
+    # limit orders that fill while they are away.
+    sess = sessions(active_orders(fills), m["sessions"]["gap_min"])
     anchor = _anchor(raw)
     bal = balance_curve(fills, ledger, funding, anchor_balance=anchor)
     expo = exposure_series(fills, bal)
@@ -72,7 +75,14 @@ def wallet_features(
     row.update(mk.relapse(trips, m["relapse"]["break_days"], m["relapse"]["before_days"], m["relapse"]["after_days"]))
     row.update(mk.position_management(trips))
     row["lottery_share"] = mk.lottery_share(fills, cfg["study"]["major_coins"])
-    row.update(mk.harm(bal, ledger))
+    window_start = (raw.get("meta") or {}).get("start_ms")
+    if window_start is None:
+        window_start = int(fills["time"].min())
+    row.update(mk.harm(bal, ledger, int(window_start)))
+    if row.get("balance_consistent") == 0.0:
+        # Missing money flows make every balance-based marker unreliable for this wallet.
+        for key in ("median_eff_leverage", "leverage_trend_weekly"):
+            row[key] = float("nan")
     return row
 
 

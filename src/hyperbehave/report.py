@@ -145,6 +145,25 @@ def validation_report(features: pd.DataFrame, out_dir: str | Path) -> Path:
     return path
 
 
+def data_quality(features: pd.DataFrame, inc: pd.DataFrame) -> pd.DataFrame:
+    """Checks that tell whether the reconstruction can be trusted for these wallets."""
+
+    def share(df, col, value=True):
+        if col not in df or not len(df):
+            return float("nan")
+        return float((df[col] == value).mean())
+
+    rows = [
+        ("included wallets", float(len(inc))),
+        ("share with balance anchored to the live account", share(inc, "balance_anchored")),
+        ("share with consistent money flows", share(inc, "balance_consistent", 1.0)),
+        ("share with volatility marker computed", float(inc["volatility_reactivity"].notna().mean()) if "volatility_reactivity" in inc and len(inc) else float("nan")),
+        ("median orders per active day", float(inc["orders_per_day"].median()) if "orders_per_day" in inc and len(inc) else float("nan")),
+        ("median days of activity", float(inc["active_days"].median()) if "active_days" in inc and len(inc) else float("nan")),
+    ]
+    return pd.DataFrame(rows, columns=["check", "value"])
+
+
 def layer_a_report(features: pd.DataFrame, out_dir: str | Path, with_profiles: bool = True) -> Path:
     """Descriptive population report on real wallets (no addresses, aggregates only)."""
     out_dir = Path(out_dir)
@@ -164,6 +183,10 @@ def layer_a_report(features: pd.DataFrame, out_dir: str | Path, with_profiles: b
         f"Wallets in the top decile on 3 or more core markers: {prev:.1%}.",
         "",
         "This is a descriptive screen of behaviour, not a diagnosis of any person.",
+        "",
+        "## Data quality",
+        "",
+        md_table(data_quality(features, inc), "{:.2f}"),
         "",
         "## Exclusions",
         "",

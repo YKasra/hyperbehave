@@ -4,8 +4,8 @@ title: "hyperbehave: gambling-like behavioural signatures in on-chain perpetual 
 authors:
   - family-names: Yaraei
     given-names: Kasra
-version: 0.1.0
-date-released: 2026-10-21
+version: 0.2.0
+date-released: 2026-10-29
 license: MIT
 repository-code: "https://github.com/YKasra/hyperbehave"
 keywords:

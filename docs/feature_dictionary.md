@@ -30,22 +30,25 @@ Core markers (used for the multi-marker high-risk screen) are marked with **core
 | `relapse_count` | Unsuccessful efforts to stop | Breaks of N days or more followed by a return | more gambling-like |
 | `relapse_size_ratio` | Unsuccessful efforts to stop, tolerance | Position size after returning from a break / before it | more gambling-like |
 | `lottery_share` | Gambling-like asset choice | Share of traded notional outside the major coins | more gambling-like |
-| `loss_to_inflow` **core** | Harm, jeopardised finances | Net trading loss / money put in (0 when profitable) | more gambling-like |
-| `max_drawdown_rel` | Harm, jeopardised finances | Max drawdown of cumulative trading PnL / money put in | more gambling-like |
+| `loss_to_capital` **core** | Harm, jeopardised finances | Net trading loss in the window / capital at risk (balance at window start + money added; 0 when profitable) | more gambling-like |
+| `max_drawdown_rel` | Harm, jeopardised finances | Max drawdown of cumulative trading PnL in the window / capital at risk | more gambling-like |
 
 ## Activity covariates
 
 Not markers, but needed as controls and for the frequency-only baseline:
-`n_fills`, `n_trips`, `active_days`, `span_days`, `fills_per_active_day`, `total_volume`,
-`median_trip_notional`, `win_rate`, `maker_share`, `n_liquidations`, `median_redeposit_delay_h`,
-`net_trading_pnl`, `total_inflow`, `total_outflow`, `withdraw_deposit_ratio`, `max_drawdown_usd`,
-`median_session_min`, `no_rest`, `balance_anchored`.
+`n_fills`, `n_orders`, `orders_per_day`, `n_trips`, `active_days`, `span_days`, `fills_per_active_day`,
+`total_volume`, `median_trip_notional`, `win_rate`, `maker_share`, `n_liquidations`,
+`median_redeposit_delay_h`, `net_trading_pnl`, `start_balance`, `window_inflow`, `window_outflow`,
+`capital_at_risk`, `withdraw_deposit_ratio`, `max_drawdown_usd`, `median_session_min`, `no_rest`,
+`balance_anchored`, `balance_consistent`.
 
 ## Units of analysis
 
 - **Fill**: one execution reported by the exchange.
 - **Round trip**: one position in one coin, from leaving zero until flat again (or a flip). This is the unit of a bet.
-- **Session**: fills separated by less than `sessions.gap_min` minutes (default 30).
+- **Order**: all fills sharing one order id; one market order sweeping several price levels is one order.
+- **Active order**: a taker order that is not a liquidation, i.e. a decision taken at that moment. Sessions, the rest window and weekly entropy use active orders only.
+- **Session**: active orders separated by less than `sessions.gap_min` minutes (default 30).
 - **Balance curve**: realised balance after each cash event; rebuilt backwards from the live account value when the data runs up to the fetch time (`balance_anchored = True`), otherwise forwards from zero.
 
 ## Known limitations
@@ -55,3 +58,5 @@ Not markers, but needed as controls and for the frequency-only baseline:
 - Positions open before the window start are flagged `left_censored` and excluded from holding-time markers.
 - Effective leverage uses realised balance and ignores unrealised PnL between fills.
 - Spot trades are excluded; the study covers perpetual futures only.
+- Stop-loss and take-profit triggers look like manual taker orders in public data.
+- Capital at risk is only as good as the public ledger. When the rebuilt balance goes clearly negative (`balance_consistent = 0`), money flows are missing and balance-based markers (leverage, harm) are set to missing for that wallet.

@@ -16,8 +16,9 @@ It turns raw fills into 21 behavioural markers, each mapped to a DSM-5
 gambling-disorder criterion, and validates every marker on synthetic traders whose
 behaviour is known before touching real data.
 
-> Status: pilot (v0.1). Pipeline, markers, tests and synthetic validation are done.
-> Next: first Layer A run on real wallets. See [docs/roadmap.md](docs/roadmap.md).
+> Status: pilot (v0.2). Pipeline, markers, tests and synthetic validation are done, and the
+> first run on real wallets is complete; v0.2 fixes three issues it surfaced.
+> Next: a larger real-wallet sample. See [docs/roadmap.md](docs/roadmap.md).
 
 ## Research questions
 
@@ -44,8 +45,11 @@ flowchart LR
 
 **Round trip** (one position from open to flat) is the unit of a bet. The **balance
 curve** is rebuilt backwards from the live account value, which turns position size
-into effective leverage. Wallets are identified by a salted hash from the moment data
-leaves the raw layer.
+into effective leverage; wallets whose public money flows do not add up are flagged and
+their balance-based markers discarded. Time-use markers (sessions, rest window) count
+only the trader's own **taker orders**, one per order, so resting limit orders that fill
+overnight and one order sweeping several price levels are not mistaken for activity.
+Wallets are identified by a salted hash from the moment data leaves the raw layer.
 
 ## Core markers
 
@@ -58,7 +62,7 @@ leaves the raw layer.
 | `rest_window_share` | Loss of control | Share of opening trades inside the wallet's own quietest 5 h window (sleep proxy) |
 | `sessions_per_active_day` | Preoccupation | Trading sessions per active day |
 | `doubling_down_share` | Chasing losses | Share of positions increased while under water |
-| `loss_to_inflow` | Harm | Net trading loss / money deposited |
+| `loss_to_capital` | Harm | Net loss in the window / capital at risk (balance at window start + money added) |
 
 All 21 markers, their definitions and known limitations:
 [docs/feature_dictionary.md](docs/feature_dictionary.md).
@@ -99,8 +103,11 @@ hyperbehave fetch --sample 500 --days 90 --resume
 hyperbehave candles --coin BTC --days 90
 
 # 5. Markers for every wallet, then the population report
-hyperbehave features --candles data/raw/candles_BTC_1h.parquet
+hyperbehave features
 hyperbehave describe
+
+# Optional: counts of event types in your raw data (no addresses), to check parsing
+hyperbehave inspect
 ```
 
 Every threshold lives in `src/hyperbehave/default_config.yaml`. Override any subset

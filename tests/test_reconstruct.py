@@ -77,3 +77,24 @@ def test_liquidation_events_are_merged():
 def test_liquidation_of_counterparty_is_ignored():
     fills = fills_to_frame([fill(1000, "BTC", "B", 1, 1, 0, liq_user="0x" + "c" * 40)], ADDR)
     assert not fills["is_liquidation"].any()
+
+
+def test_send_to_perp_counts_and_spot_moves_do_not():
+    ledger = ledger_to_frame([
+        {"time": 1, "delta": {"type": "send", "user": "0xb", "destination": ADDR, "token": "USDC",
+                              "amount": "50", "usdcValue": "50", "sourceDex": "", "destinationDex": ""}},
+        {"time": 2, "delta": {"type": "send", "user": "0xb", "destination": ADDR, "token": "USDC",
+                              "amount": "20", "usdcValue": "20", "sourceDex": "spot", "destinationDex": "spot"}},
+        {"time": 3, "delta": {"type": "spotTransfer", "token": "PURR", "amount": "9", "usdcValue": "9",
+                              "user": "0xb", "destination": ADDR}},
+        {"time": 4, "delta": {"type": "accountClassTransfer", "usdc": "15", "toPerp": True}},
+    ], ADDR)
+    assert ledger["flow"].tolist() == [50.0, 0.0, 0.0, 15.0]
+
+
+def test_order_sweep_is_one_order():
+    from hyperbehave.reconstruct import order_starts
+
+    # One market order (oid 7) matched against four resting orders in the same millisecond.
+    fills = fills_to_frame([dict(fill(1000, "BTC", "B", 1, 100, k), tid=k, oid=7) for k in range(4)])
+    assert len(order_starts(fills)) == 1

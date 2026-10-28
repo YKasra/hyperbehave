@@ -134,6 +134,33 @@ def round_trips(fills: pd.DataFrame) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
+def order_starts(fills: pd.DataFrame) -> pd.DataFrame:
+    """One row per order (its first fill). One market order that sweeps several resting
+    orders produces several fills in the same millisecond; counting orders avoids reading
+    that as machine-speed trading."""
+    if fills.empty or "oid" not in fills:
+        return fills
+    key = fills["oid"].where(fills["oid"].notna(), fills["tid"])
+    return fills.loc[~key.duplicated(keep="first")]
+
+
+def active_orders(fills: pd.DataFrame, min_n: int = 20) -> pd.DataFrame:
+    """Orders that reflect a decision taken at that moment.
+
+    Taker orders (``crossed``) are executed when the trader acts. Maker fills come from
+    resting limit orders and can execute while the trader is asleep, so they are left out
+    unless the wallet has fewer than ``min_n`` taker orders. Liquidations are never
+    decisions. Stop-loss and take-profit triggers cannot be told apart from manual taker
+    orders in public data (documented limitation).
+    """
+    if fills.empty or "crossed" not in fills:
+        return fills
+    fills = fills[~fills["is_liquidation"].astype(bool)] if "is_liquidation" in fills else fills
+    orders = order_starts(fills)
+    taker = orders[orders["crossed"].astype(bool)]
+    return taker if len(taker) >= min_n else orders
+
+
 def sessions(fills: pd.DataFrame, gap_min: float = 30.0) -> pd.DataFrame:
     """Group fills into sessions separated by more than ``gap_min`` minutes."""
     cols = ["session", "start", "end", "n_fills", "duration_min"]

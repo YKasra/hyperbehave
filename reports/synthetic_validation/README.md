@@ -18,10 +18,10 @@ AUC = probability that a random gambler scores higher than a random non-gambler 
 | doubling_down_share | 1.000 | 1.000 |  |
 | loss_chasing_index | 0.998 | 1.000 |  |
 | hour_week_entropy | 0.984 | 1.000 |  |
-| sessions_per_active_day | 0.977 | 1.000 |  |
-| max_session_min | 0.954 | 1.000 |  |
+| sessions_per_active_day | 0.961 | 1.000 |  |
 | post_loss_size_ratio | 0.933 | 1.000 |  |
-| loss_to_inflow | 0.895 | 1.000 |  |
+| max_session_min | 0.911 | 1.000 |  |
+| loss_to_capital | 0.895 | 1.000 |  |
 | size_trend_weekly | 0.812 | 1.000 |  |
 | volatility_reactivity | 0.601 | 1.000 | no reaction to market shocks was programmed |
 | relapse_count | 0.600 | 1.000 | breaks happen only after rare full ruin |
@@ -43,11 +43,11 @@ AUC = probability that a random gambler scores higher than a random non-gambler 
 | size_trend_weekly | -0.003 | -0.013 | 0.052 |
 | leverage_trend_weekly | -0.000 | -0.000 | 0.002 |
 | median_eff_leverage | 0.219 | 0.642 | 4.817 |
-| sessions_per_active_day | 2.444 | 4.344 | 5.667 |
-| max_session_min | 27.914 | 29.329 | 53.963 |
+| sessions_per_active_day | 2.444 | 4.344 | 5.251 |
+| max_session_min | 27.914 | 29.329 | 52.960 |
 | rest_window_share | 0.000 | 0.000 | 0.030 |
 | hour_week_entropy | 0.609 | 0.804 | 0.876 |
-| session_end_loss_streak | 0.572 | 0.512 | 0.169 |
+| session_end_loss_streak | 0.572 | 0.512 | 0.172 |
 | doubling_down_share | 0.000 | 0.000 | 0.242 |
 | disposition_ratio | 0.746 | 1.000 | 3.990 |
 | house_money_ratio | 1.003 | 1.008 | 0.948 |
@@ -55,7 +55,7 @@ AUC = probability that a random gambler scores higher than a random non-gambler 
 | relapse_count | 0.000 | 0.000 | 0.000 |
 | relapse_size_ratio |  |  | 0.529 |
 | lottery_share | 0.099 | 0.390 | 0.739 |
-| loss_to_inflow | 0.028 | 0.172 | 0.858 |
+| loss_to_capital | 0.028 | 0.172 | 0.858 |
 | max_drawdown_rel | 0.064 | 0.316 | 1.113 |
 
 ![core markers](synthetic_core_markers.png)

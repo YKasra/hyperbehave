@@ -13,6 +13,7 @@ import pandas as pd
 from hyperbehave import load_config
 
 DAY_MS = 86_400_000
+DEFAULT_CANDLES = "data/raw/candles_BTC_1h.parquet"
 
 
 def _now_ms() -> int:
@@ -59,6 +60,12 @@ def cmd_fetch(args) -> None:
     print(f"Fetching {len(todo)} wallets ({len(done)} already on disk). Ctrl+C is safe; rerun with --resume.")
     t0 = time.monotonic()
     for i, addr in enumerate(todo, 1):
+        if not args.end:
+            # Without a fixed end, use "now" for each wallet so its data runs right up to
+            # the account snapshot taken in the same call (needed to anchor the balance).
+            end = _now_ms()
+            if not args.start:
+                start = end - args.days * DAY_MS
         try:
             data = client.fetch_wallet(addr, start, end)
             save_wallet(args.out, addr, data)
@@ -89,8 +96,14 @@ def cmd_features(args) -> None:
 
     cfg = load_config(args.config)
     shocks = None
-    if args.candles:
-        shocks = market_shocks(pd.read_parquet(args.candles), cfg["markers"]["volatility"]["shock_quantile"])
+    candles = args.candles
+    if candles is None and Path(DEFAULT_CANDLES).exists():
+        candles = DEFAULT_CANDLES
+    if candles:
+        shocks = market_shocks(pd.read_parquet(candles), cfg["markers"]["volatility"]["shock_quantile"])
+        print(f"Using market candles from {candles}")
+    else:
+        print("No candles found: volatility_reactivity will be empty. Run 'hyperbehave candles' first.")
     table = build_feature_table(iter_wallets(args.raw), cfg, get_salt(args.private), shocks)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     table.to_parquet(args.out, index=False)
@@ -134,6 +147,34 @@ def cmd_describe(args) -> None:
     print(f"Layer A report -> {path}")
 
 
+def cmd_inspect(args) -> None:
+    """Aggregate counts of event types in the raw data (no addresses), for checking
+    that every ledger and fill type is parsed."""
+    from collections import Counter
+
+    from hyperbehave.storage import iter_wallets
+
+    ledger_types, dirs, coins = Counter(), Counter(), Counter()
+    send_dex, n = Counter(), 0
+    for _, raw in iter_wallets(args.raw):
+        n += 1
+        for rec in raw.get("ledger", []):
+            d = rec.get("delta") or {}
+            ledger_types[d.get("type", "?")] += 1
+            if d.get("type") == "send":
+                send_dex[f"{d.get('sourceDex', '?')!r} -> {d.get('destinationDex', '?')!r} {d.get('token', '?')}"] += 1
+        for f in raw.get("fills", []):
+            dirs[f.get("dir", "?")] += 1
+            c = str(f.get("coin", ""))
+            coins["spot" if c.startswith("@") or "/" in c else ("builder perp" if ":" in c else "perp")] += 1
+    print(f"wallets: {n}")
+    for title, counter in (("ledger event types", ledger_types), ("send routes", send_dex),
+                           ("fill directions", dirs), ("market kinds", coins)):
+        print(f"\n{title}:")
+        for k, v in counter.most_common(25):
+            print(f"  {v:>8}  {k}")
+
+
 def cmd_s3_size(args) -> None:
     from hyperbehave.ingest.s3_archive import size_range
 
@@ -171,13 +212,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("candles", help="hourly candles for the market-shock marker")
     sp.add_argument("--coin", default="BTC")
-    sp.add_argument("--out", default="data/raw/candles_BTC_1h.parquet")
+    sp.add_argument("--out", default=DEFAULT_CANDLES)
     window(sp)
     sp.set_defaults(func=cmd_candles)
 
     sp = sub.add_parser("features", help="compute the behavioural markers for every wallet")
     sp.add_argument("--raw", default="data/raw/wallets")
-    sp.add_argument("--candles", default=None)
+    sp.add_argument("--candles", default=None, help=f"default: {DEFAULT_CANDLES} if it exists")
     sp.add_argument("--private", default="data/private", help="folder holding the secret salt")
     sp.add_argument("--out", default="data/processed/features.parquet")
     sp.set_defaults(func=cmd_features)
@@ -203,6 +244,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--out", default="reports/layer_a")
     sp.add_argument("--no-profiles", action="store_true")
     sp.set_defaults(func=cmd_describe)
+
+    sp = sub.add_parser("inspect", help="count event types in the raw data (no addresses)")
+    sp.add_argument("--raw", default="data/raw/wallets")
+    sp.set_defaults(func=cmd_inspect)
 
     sp = sub.add_parser("s3-size", help="size and cost of an S3 archive date range (requester pays)")
     sp.add_argument("--start", required=True)
