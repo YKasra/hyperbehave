@@ -7,7 +7,7 @@ All data used here is public. Nothing requires an exchange agreement or an API k
 | Step | Source | What it gives | Limits |
 | --- | --- | --- | --- |
 | 1. Find wallets | Websocket `trades` channel (`wss://api.hyperliquid.xyz/ws`) | The two counterparties (`users`) of every trade | Samples wallets in proportion to how often they trade during the listening window |
-| 2. Fills | `POST /info` `userFillsByTime` | Coin, price, size, side, `dir`, `startPosition`, `closedPnl`, fee, taker flag, liquidation info | At most 2,000 fills per call; only the 10,000 most recent fills per wallet |
+| 2. Fills | `POST /info` `userFillsByTime` | Coin, price, size, side, `dir`, `startPosition`, `closedPnl`, fee, taker flag, liquidation info | At most 2,000 fills per call. Third-party docs mention a 10,000-fill cap per wallet, but paging by time window returned over 30,000 fills for active wallets in the first real run |
 | 3. Money in and out | `userNonFundingLedgerUpdates` | Deposits, withdrawals, transfers, vault flows, liquidations with account value | Time-windowed; fetched from the wallet's first event so the balance can be rebuilt |
 | 4. Funding | `userFunding` | Funding payments per coin | Time-windowed |
 | 5. Account snapshots | `clearinghouseState`, `spotClearinghouseState` | Current perp account value, open positions, spot balances | Snapshot at fetch time only; used to anchor the balance curve (spot USDC can back perps in unified accounts) |
