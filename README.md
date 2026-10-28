@@ -106,8 +106,9 @@ hyperbehave candles --coin BTC --days 90
 hyperbehave features
 hyperbehave describe
 
-# Optional: counts of event types in your raw data (no addresses), to check parsing
-hyperbehave inspect
+# Optional checks (no addresses in the output)
+hyperbehave inspect     # counts of event types in the raw data
+hyperbehave diagnose    # why a wallet's money flows do not add up
 ```
 
 Every threshold lives in `src/hyperbehave/default_config.yaml`. Override any subset

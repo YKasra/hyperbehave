@@ -34,6 +34,28 @@ def is_spot_coin(coin: str) -> bool:
     return coin.startswith("@") or "/" in coin
 
 
+def is_builder_perp(coin: str) -> bool:
+    """Builder-deployed perps (HIP-3) are named ``dex:SYMBOL`` and settle in their own
+    margin account, outside the default perp account that the snapshot reports."""
+    return ":" in coin
+
+
+def default_dex_only(df: pd.DataFrame) -> pd.DataFrame:
+    """Rows of a fills or funding table that belong to the default perp account."""
+    if df.empty or "coin" not in df:
+        return df
+    return df.loc[~df["coin"].astype(str).str.contains(":", regex=False)]
+
+
+def spot_usdc(spot_state: dict[str, Any] | None) -> float:
+    """Total USDC held on the spot side, 0 when unknown."""
+    for b in (spot_state or {}).get("balances") or []:
+        if str(b.get("coin", "")).upper() == "USDC":
+            v = _f(b.get("total"))
+            return 0.0 if np.isnan(v) else v
+    return 0.0
+
+
 def fills_to_frame(fills: list[dict[str, Any]], address: str | None = None) -> pd.DataFrame:
     """Typed, sorted, de-duplicated perp fills."""
     if not fills:

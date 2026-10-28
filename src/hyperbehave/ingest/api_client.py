@@ -175,6 +175,10 @@ class HyperliquidInfoClient:
         """Current perp account snapshot (account value, open positions)."""
         return self.post({"type": "clearinghouseState", "user": user}) or {}
 
+    def spot_state(self, user: str) -> Record:
+        """Current spot balances (needed when spot USDC backs perp positions)."""
+        return self.post({"type": "spotClearinghouseState", "user": user}) or {}
+
     def fetch_wallet(
         self, user: str, start_ms: int, end_ms: int, ledger_start_ms: int = 0
     ) -> dict[str, Any]:
@@ -188,6 +192,7 @@ class HyperliquidInfoClient:
             "ledger": self.user_ledger(user, ledger_start_ms, end_ms),
             "funding": self.user_funding(user, start_ms, end_ms),
             "state": self.clearinghouse_state(user),
+            "spot_state": self.spot_state(user),
             "meta": {"start_ms": start_ms, "end_ms": end_ms, "fetched_ms": int(time.time() * 1000)},
         }
 

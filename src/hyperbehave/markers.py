@@ -73,7 +73,7 @@ MARKERS: list[MarkerSpec] = [
     MarkerSpec("loss_to_capital", "Harm, jeopardised finances",
                "Net trading loss in the window / capital at risk (balance at window start + money added; 0 when profitable)", "higher"),
     MarkerSpec("max_drawdown_rel", "Harm, jeopardised finances",
-               "Max drawdown of cumulative trading PnL in the window / capital at risk", "higher"),
+               "Worst fall of trading equity (capital at risk + cumulative result) from its running peak, as a share of the peak", "higher"),
 ]
 
 CORE_MARKERS = [
@@ -363,6 +363,13 @@ def harm(balance: pd.DataFrame, ledger: pd.DataFrame, window_start: int | None =
     curve = np.r_[0.0, inside["trading_pnl"].to_numpy(dtype=float) - base]
     dd = float(np.max(np.maximum.accumulate(curve) - curve))
     net = float(curve[-1])
+    # Relative drawdown: worst fall of trading equity (capital + cumulative result)
+    # from its running peak, as a share of that peak. Bounded at 1 when equity >= 0.
+    equity = max(start_bal, 0.0) + inflow + curve
+    peak = np.maximum.accumulate(equity)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rel = np.where(peak > 0, (peak - equity) / peak, 0.0)
+    dd_rel = float(np.clip(np.nanmax(rel), 0.0, 1.0)) if len(rel) else NAN
     min_bal = float(inside["balance"].min()) if len(inside) else start_bal
     consistent = min_bal >= -max(10.0, 0.05 * capital)
 
@@ -371,7 +378,7 @@ def harm(balance: pd.DataFrame, ledger: pd.DataFrame, window_start: int | None =
                balance_consistent=float(consistent))
     if capital > 0 and consistent:
         out["loss_to_capital"] = max(-net, 0.0) / capital
-        out["max_drawdown_rel"] = dd / capital
+        out["max_drawdown_rel"] = dd_rel
         if inflow > 0:
             out["withdraw_deposit_ratio"] = outflow / inflow
     return out

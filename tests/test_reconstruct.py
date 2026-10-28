@@ -98,3 +98,12 @@ def test_order_sweep_is_one_order():
     # One market order (oid 7) matched against four resting orders in the same millisecond.
     fills = fills_to_frame([dict(fill(1000, "BTC", "B", 1, 100, k), tid=k, oid=7) for k in range(4)])
     assert len(order_starts(fills)) == 1
+
+
+def test_builder_perps_kept_for_behaviour_but_not_balance():
+    from hyperbehave.normalize import default_dex_only, spot_usdc
+
+    fills = fills_to_frame([fill(1, "BTC", "B", 1, 1, 0), fill(2, "xyz:TSLA", "B", 1, 1, 0)])
+    assert fills["coin"].tolist() == ["BTC", "xyz:TSLA"]
+    assert default_dex_only(fills)["coin"].tolist() == ["BTC"]
+    assert spot_usdc({"balances": [{"coin": "HYPE", "total": "3"}, {"coin": "USDC", "total": "250.5"}]}) == 250.5

@@ -11,6 +11,7 @@ import pandas as pd
 from hyperbehave import markers as mk
 from hyperbehave.filters import bot_flags
 from hyperbehave.normalize import (
+    default_dex_only,
     fills_to_frame,
     funding_to_frame,
     ledger_to_frame,
@@ -59,11 +60,16 @@ def wallet_features(
     # limit orders that fill while they are away.
     sess = sessions(active_orders(fills), m["sessions"]["gap_min"])
     anchor = _anchor(raw)
-    bal = balance_curve(fills, ledger, funding, anchor_balance=anchor)
-    expo = exposure_series(fills, bal)
+    # The account snapshot covers only the default perp account, so the balance and
+    # leverage are rebuilt from that account's fills and funding (builder-deployed
+    # markets settle elsewhere). Behavioural markers still use every perp market.
+    main_fills = default_dex_only(fills)
+    bal = balance_curve(main_fills, ledger, default_dex_only(funding), anchor_balance=anchor)
+    expo = exposure_series(main_fills, bal)
     liqs = liquidation_times(fills, ledger)
 
     row["balance_anchored"] = anchor is not None
+    row["builder_perp_share"] = float(1 - len(main_fills) / len(fills))
     row.update(mk.activity(fills, trips))
     row.update(mk.loss_chasing(trips, m["loss_chasing"]["reentry_window_min"], m["loss_chasing"]["min_events"]))
     row["streak_escalation_ratio"] = mk.streak_escalation(trips, m["loss_streak"]["min_streak"])

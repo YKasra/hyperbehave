@@ -175,6 +175,32 @@ def cmd_inspect(args) -> None:
             print(f"  {v:>8}  {k}")
 
 
+def cmd_diagnose(args) -> None:
+    from hyperbehave.diagnostics import diagnose
+    from hyperbehave.storage import get_salt, iter_wallets
+
+    fetch_spot = None
+    if args.live:
+        from hyperbehave.ingest.api_client import HyperliquidInfoClient
+
+        cfg = load_config(args.config)
+        client = HyperliquidInfoClient(cfg["api"]["base_url"], cfg["api"]["min_interval_s"])
+        fetch_spot = client.spot_state
+    table = diagnose(iter_wallets(args.raw), get_salt(args.private), not args.all, fetch_spot)
+    if table.empty:
+        print("Every wallet's money flows add up.")
+        return
+    pd.set_option("display.width", 250)
+    pd.set_option("display.max_columns", 50)
+    pd.set_option("display.max_colwidth", 120)
+    main = [c for c in table.columns if c not in ("ledger_types", "state_keys")]
+    print(table[main].to_string(index=False))
+    print("\nledger event types per wallet:")
+    for _, r in table.iterrows():
+        print(f"  {r['wallet']}: {r['ledger_types'] or '(none)'}")
+    print("\naccount snapshot fields:", table["state_keys"].iloc[0])
+
+
 def cmd_s3_size(args) -> None:
     from hyperbehave.ingest.s3_archive import size_range
 
@@ -248,6 +274,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("inspect", help="count event types in the raw data (no addresses)")
     sp.add_argument("--raw", default="data/raw/wallets")
     sp.set_defaults(func=cmd_inspect)
+
+    sp = sub.add_parser("diagnose", help="explain wallets whose money flows do not add up (no addresses)")
+    sp.add_argument("--raw", default="data/raw/wallets")
+    sp.add_argument("--private", default="data/private")
+    sp.add_argument("--all", action="store_true", help="show every wallet, not only inconsistent ones")
+    sp.add_argument("--live", action="store_true", help="fetch each wallet's spot balance if not on disk")
+    sp.set_defaults(func=cmd_diagnose)
 
     sp = sub.add_parser("s3-size", help="size and cost of an S3 archive date range (requester pays)")
     sp.add_argument("--start", required=True)

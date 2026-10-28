@@ -56,6 +56,6 @@ AUC = probability that a random gambler scores higher than a random non-gambler 
 | relapse_size_ratio |  |  | 0.529 |
 | lottery_share | 0.099 | 0.390 | 0.739 |
 | loss_to_capital | 0.028 | 0.172 | 0.858 |
-| max_drawdown_rel | 0.064 | 0.316 | 1.113 |
+| max_drawdown_rel | 0.062 | 0.285 | 0.936 |
 
 ![core markers](synthetic_core_markers.png)

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 LIST_PARTS = ("fills", "ledger", "funding")
-DICT_PARTS = ("state", "meta")
+DICT_PARTS = ("state", "spot_state", "meta")
 
 
 def save_wallet(root: str | Path, address: str, data: dict[str, Any]) -> Path:

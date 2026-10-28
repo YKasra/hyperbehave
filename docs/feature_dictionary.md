@@ -31,7 +31,7 @@ Core markers (used for the multi-marker high-risk screen) are marked with **core
 | `relapse_size_ratio` | Unsuccessful efforts to stop, tolerance | Position size after returning from a break / before it | more gambling-like |
 | `lottery_share` | Gambling-like asset choice | Share of traded notional outside the major coins | more gambling-like |
 | `loss_to_capital` **core** | Harm, jeopardised finances | Net trading loss in the window / capital at risk (balance at window start + money added; 0 when profitable) | more gambling-like |
-| `max_drawdown_rel` | Harm, jeopardised finances | Max drawdown of cumulative trading PnL in the window / capital at risk | more gambling-like |
+| `max_drawdown_rel` | Harm, jeopardised finances | Worst fall of trading equity (capital at risk + cumulative result) from its running peak, as a share of the peak | more gambling-like |
 
 ## Activity covariates
 
@@ -40,7 +40,7 @@ Not markers, but needed as controls and for the frequency-only baseline:
 `total_volume`, `median_trip_notional`, `win_rate`, `maker_share`, `n_liquidations`,
 `median_redeposit_delay_h`, `net_trading_pnl`, `start_balance`, `window_inflow`, `window_outflow`,
 `capital_at_risk`, `withdraw_deposit_ratio`, `max_drawdown_usd`, `median_session_min`, `no_rest`,
-`balance_anchored`, `balance_consistent`.
+`balance_anchored`, `balance_consistent`, `builder_perp_share`.
 
 ## Units of analysis
 
@@ -58,5 +58,6 @@ Not markers, but needed as controls and for the frequency-only baseline:
 - Positions open before the window start are flagged `left_censored` and excluded from holding-time markers.
 - Effective leverage uses realised balance and ignores unrealised PnL between fills.
 - Spot trades are excluded; the study covers perpetual futures only.
+- Builder-deployed perps (HIP-3, `dex:COIN`) count for behavioural markers but not for the balance, because they settle in a separate margin account.
 - Stop-loss and take-profit triggers look like manual taker orders in public data.
 - Capital at risk is only as good as the public ledger. When the rebuilt balance goes clearly negative (`balance_consistent = 0`), money flows are missing and balance-based markers (leverage, harm) are set to missing for that wallet.
