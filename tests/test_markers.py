@@ -108,3 +108,53 @@ def test_harm_uses_window_capital_and_detects_missing_flows():
     broken = bal.assign(balance=[10_000, 1_000, -2_000, -2_500])
     out = mk.harm(broken, ledger, window_start=100)
     assert out["balance_consistent"] == 0.0 and np.isnan(out["loss_to_capital"])
+
+
+ADDR = "0x" + "a" * 40
+OTHER = "0x" + "b" * 40
+
+
+def _wallet(ledger, perp_value, spot_value, fills):
+    end = 10_000_000
+    return {"fills": fills, "ledger": ledger, "funding": [],
+            "state": {"marginSummary": {"accountValue": str(perp_value)}, "assetPositions": []},
+            "spot_state": {"balances": [{"coin": "USDC", "total": str(spot_value)}]},
+            "meta": {"start_ms": 0, "end_ms": end, "fetched_ms": end}}
+
+
+def _losing_trade(t0):
+    from tests.conftest import fill
+
+    return [fill(t0, "BTC", "B", 1, 100, 0, d="Open Long"),
+            fill(t0 + 60_000, "BTC", "A", 1, 22, 1, pnl=-78.0, d="Close Long")]
+
+
+def _send(t, user, dest, amount, src_dex, dst_dex):
+    return {"time": t, "hash": f"0x{t}", "delta": {"type": "send", "user": user, "destination": dest,
+            "token": "USDC", "amount": str(amount), "usdcValue": str(amount),
+            "sourceDex": src_dex, "destinationDex": dst_dex}}
+
+
+def test_standard_account_with_self_send_to_spot(cfg):
+    # Deposit 5,000 to perp, lose 78, move 4,813 of own money from perp to spot.
+    ledger = [{"time": 1_000, "delta": {"type": "deposit", "usdc": "5000"}},
+              _send(5_000_000, ADDR, ADDR, 4813, "", "spot")]
+    row = wallet_features(ADDR, _wallet(ledger, 109, 4813, _losing_trade(2_000_000)), cfg)
+    assert row["balance_model"] == "perp+spot"
+    assert np.isclose(row["capital_at_risk"], 5000) and np.isclose(row["loss_to_capital"], 78 / 5000)
+
+
+def test_unified_account_spot_usdc_backs_perps(cfg):
+    # Money arrives on the spot side; perp losses are paid from it; perp account shows 0.
+    ledger = [_send(1_000, OTHER, ADDR, 5000, "", "spot")]
+    row = wallet_features(ADDR, _wallet(ledger, 0, 4922, _losing_trade(2_000_000)), cfg)
+    assert row["balance_model"] == "perp+spot"
+    assert np.isclose(row["capital_at_risk"], 5000) and np.isclose(row["loss_to_capital"], 78 / 5000)
+
+
+def test_send_between_two_users_perp_side():
+    from hyperbehave.normalize import ledger_to_frame
+
+    led = ledger_to_frame([_send(1, ADDR, OTHER, 40, "", ""), _send(2, ADDR, ADDR, 10, "", "spot")], ADDR)
+    assert led["flow"].tolist() == [-40.0, -10.0]        # perp view: both leave perp
+    assert led["flow_wallet"].tolist() == [-40.0, 0.0]   # wallet view: self move cancels

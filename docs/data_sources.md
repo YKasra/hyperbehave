@@ -10,7 +10,7 @@ All data used here is public. Nothing requires an exchange agreement or an API k
 | 2. Fills | `POST /info` `userFillsByTime` | Coin, price, size, side, `dir`, `startPosition`, `closedPnl`, fee, taker flag, liquidation info | At most 2,000 fills per call; only the 10,000 most recent fills per wallet |
 | 3. Money in and out | `userNonFundingLedgerUpdates` | Deposits, withdrawals, transfers, vault flows, liquidations with account value | Time-windowed; fetched from the wallet's first event so the balance can be rebuilt |
 | 4. Funding | `userFunding` | Funding payments per coin | Time-windowed |
-| 5. Account snapshot | `clearinghouseState` | Current account value and open positions | Snapshot at fetch time only; used to anchor the balance curve |
+| 5. Account snapshots | `clearinghouseState`, `spotClearinghouseState` | Current perp account value, open positions, spot balances | Snapshot at fetch time only; used to anchor the balance curve (spot USDC can back perps in unified accounts) |
 | 6. Market context | `candleSnapshot` | Hourly candles for the market-shock marker | At most 5,000 candles per call |
 
 Requests are throttled (`api.min_interval_s`, default 1 s) and retried with backoff on

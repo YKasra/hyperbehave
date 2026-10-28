@@ -17,7 +17,7 @@ FILL_COLUMNS = [
     "notional", "closed_pnl", "fee", "crossed", "is_liquidation", "is_twap", "oid", "tid",
 ]
 
-LEDGER_COLUMNS = ["time", "ts", "type", "flow", "is_inflow", "is_outflow", "external", "account_value"]
+LEDGER_COLUMNS = ["time", "ts", "type", "flow", "flow_wallet", "is_inflow", "is_outflow", "external", "account_value"]
 
 FUNDING_COLUMNS = ["time", "ts", "coin", "usdc"]
 
@@ -127,56 +127,108 @@ def _usdc_amount(delta: dict[str, Any]) -> float:
     return 0.0
 
 
-def _ledger_flow(delta: dict[str, Any], address: str | None) -> tuple[float, bool]:
-    """Signed USDC flow into the **perp** trading account, and whether it is external money.
+def _is_usdc(delta: dict[str, Any]) -> bool:
+    return str(delta.get("token", "USDC")).upper().startswith("USDC")
 
-    Spot-only movements (``spotTransfer``, ``send`` to or from the spot side) do not
-    change perp margin, so they count as zero here. Moving USDC between the wallet's own
-    spot and perp sides (``accountClassTransfer``) does change perp margin.
+
+def _send_parties(delta: dict[str, Any], addr: str | None) -> tuple[bool, bool]:
+    """(money arrives at this wallet, money leaves this wallet). Both are True for a
+    transfer between the wallet's own accounts (for example perp to spot)."""
+    dest = str(delta.get("destination", "")).lower()
+    user = str(delta.get("user", "")).lower()
+    incoming = addr is not None and dest == addr
+    outgoing = addr is not None and (user == addr if user else not incoming)
+    return incoming, outgoing
+
+
+def _perp_flow(delta: dict[str, Any], addr: str | None) -> float:
+    """USDC flow into the default perp account (standard account mode)."""
+    kind = delta.get("type")
+    usdc = _usdc_amount(delta)
+    if kind == "deposit":
+        return usdc
+    if kind == "withdraw":
+        return -usdc
+    if kind == "send":
+        if not _is_usdc(delta):
+            return 0.0
+        incoming, outgoing = _send_parties(delta, addr)
+        flow = 0.0
+        if incoming and delta.get("destinationDex", "") in ("", None):
+            flow += usdc
+        if outgoing and delta.get("sourceDex", "") in ("", None):
+            flow -= usdc
+        return flow
+    if kind in ("internalTransfer", "subAccountTransfer"):
+        incoming, outgoing = _send_parties(delta, addr)
+        return (usdc if incoming else 0.0) - (usdc if outgoing else 0.0)
+    if kind == "accountClassTransfer":
+        return usdc if delta.get("toPerp") else -usdc
+    if kind == "vaultDeposit":
+        return -usdc
+    if kind == "vaultWithdraw":
+        amount = _f(delta.get("netWithdrawnUsd", delta.get("usdc", 0)))
+        return 0.0 if np.isnan(amount) else amount
+    return 0.0  # spotTransfer, spotGenesis, rewards, staking, borrowLend: not perp cash
+
+
+def _wallet_flow(delta: dict[str, Any], addr: str | None) -> float:
+    """USDC flow into the wallet's default perp + spot accounts taken together.
+
+    Used for unified-account / portfolio-margin wallets, where spot USDC backs perp
+    positions directly. Moves between the wallet's own perp and spot sides cancel out;
+    moves to or from builder-deployed perp accounts count, since those balances are
+    outside the two snapshots.
     """
     kind = delta.get("type")
     usdc = _usdc_amount(delta)
-    addr = address.lower() if address else None
     if kind == "deposit":
-        return usdc, True
+        return usdc
     if kind == "withdraw":
-        return -usdc, True
-    if kind == "spotTransfer":
-        return 0.0, True
+        return -usdc
     if kind == "send":
-        dest = str(delta.get("destination", "")).lower()
-        incoming = addr is not None and dest == addr
-        dex = delta.get("destinationDex" if incoming else "sourceDex", "")
-        if dex not in ("", None):  # "spot" or another dex: not the default perp account
-            return 0.0, True
-        return (usdc if incoming else -usdc), True
-    if kind in ("internalTransfer", "subAccountTransfer"):
-        dest = str(delta.get("destination", "")).lower()
-        incoming = addr is not None and dest == addr
-        return (usdc if incoming else -usdc), True
-    if kind == "accountClassTransfer":
-        return (usdc if delta.get("toPerp") else -usdc), False
+        if not _is_usdc(delta):
+            return 0.0
+        incoming, outgoing = _send_parties(delta, addr)
+        flow = 0.0
+        if incoming and delta.get("destinationDex", "") in ("", "spot", None):
+            flow += usdc
+        if outgoing and delta.get("sourceDex", "") in ("", "spot", None):
+            flow -= usdc
+        return flow
+    if kind in ("spotTransfer", "internalTransfer", "subAccountTransfer"):
+        if kind == "spotTransfer" and not _is_usdc(delta):
+            return 0.0
+        incoming, outgoing = _send_parties(delta, addr)
+        return (usdc if incoming else 0.0) - (usdc if outgoing else 0.0)
     if kind == "vaultDeposit":
-        return -usdc, False
+        return -usdc
     if kind == "vaultWithdraw":
         amount = _f(delta.get("netWithdrawnUsd", delta.get("usdc", 0)))
-        return (0.0 if np.isnan(amount) else amount), False
-    return 0.0, False
+        return 0.0 if np.isnan(amount) else amount
+    return 0.0  # accountClassTransfer is internal; tokens, staking, borrowLend not USDC cash
+
+
+EXTERNAL_TYPES = {"deposit", "withdraw", "send", "spotTransfer", "internalTransfer", "subAccountTransfer"}
 
 
 def ledger_to_frame(ledger: list[dict[str, Any]], address: str | None = None) -> pd.DataFrame:
+    """Ledger events with two flow columns: ``flow`` (default perp account only) and
+    ``flow_wallet`` (perp + spot together, for unified accounts)."""
     if not ledger:
         return pd.DataFrame(columns=LEDGER_COLUMNS)
+    addr = address.lower() if address else None
     rows = []
     for rec in ledger:
         delta = rec.get("delta") or {}
-        flow, external = _ledger_flow(delta, address)
+        kind = delta.get("type", "unknown")
         rows.append(
             {
                 "time": int(rec["time"]),
-                "type": delta.get("type", "unknown"),
-                "flow": flow,
-                "external": external,
+                "type": kind,
+                "flow": _perp_flow(delta, addr),
+                "flow_wallet": _wallet_flow(delta, addr),
+                "external": kind in EXTERNAL_TYPES,
                 "account_value": _f(delta.get("accountValue")),
             }
         )
@@ -185,6 +237,38 @@ def ledger_to_frame(ledger: list[dict[str, Any]], address: str | None = None) ->
     df["is_outflow"] = df["flow"] < 0
     df["ts"] = pd.to_datetime(df["time"], unit="ms", utc=True)
     return df[LEDGER_COLUMNS].reset_index(drop=True)
+
+
+def use_wallet_flows(ledger: pd.DataFrame) -> pd.DataFrame:
+    """Ledger view for the perp + spot balance model."""
+    if ledger.empty:
+        return ledger
+    out = ledger.copy()
+    out["flow"] = out["flow_wallet"]
+    out["is_inflow"] = out["flow"] > 0
+    out["is_outflow"] = out["flow"] < 0
+    return out
+
+
+def spot_cash_frame(fills: list[dict[str, Any]]) -> pd.DataFrame:
+    """USDC cash effect of spot trades (buying spends USDC, selling receives it).
+
+    Assumes spot pairs are quoted in USDC, which holds for most Hyperliquid spot pairs;
+    the balance consistency check catches wallets where this is wrong.
+    """
+    rows = []
+    for f in fills:
+        if not is_spot_coin(str(f.get("coin", ""))):
+            continue
+        notional = _f(f.get("px")) * _f(f.get("sz"))
+        if not np.isfinite(notional):
+            continue
+        cash = notional if f.get("side") == "A" else -notional
+        if str(f.get("feeToken", "")).upper() == "USDC":
+            fee = _f(f.get("fee", 0))
+            cash -= 0.0 if np.isnan(fee) else fee
+        rows.append({"time": int(f["time"]), "delta": cash})
+    return pd.DataFrame(rows, columns=["time", "delta"])
 
 
 def realised_balance_from_state(state: dict[str, Any] | None) -> float | None:

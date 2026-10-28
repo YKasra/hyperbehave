@@ -16,6 +16,9 @@ from hyperbehave.normalize import (
     funding_to_frame,
     ledger_to_frame,
     realised_balance_from_state,
+    spot_cash_frame,
+    spot_usdc,
+    use_wallet_flows,
 )
 from hyperbehave.reconstruct import (
     active_orders,
@@ -36,6 +39,47 @@ def _anchor(raw: dict[str, Any]) -> float | None:
     if end is None or fetched is None or fetched - end > ANCHOR_TOLERANCE_MS:
         return None
     return realised_balance_from_state(raw.get("state"))
+
+
+def reconstruct_balance(
+    raw: dict[str, Any],
+    fills: pd.DataFrame,
+    ledger: pd.DataFrame,
+    funding: pd.DataFrame,
+    window_start: int,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, float], str]:
+    """Rebuild the trader's USDC balance on the exchange.
+
+    Models, in order of preference:
+
+    1. ``perp+spot``: default perp account and spot USDC taken together, counting only
+       money that enters or leaves the wallet (moves between the wallet's own perp and
+       spot sides cancel out). This is correct in every account mode, including unified
+       accounts and portfolio margin, where spot USDC backs perp positions directly.
+       Needs the spot snapshot.
+    2. ``perp``: the default perp account alone. Used when there is no spot snapshot or
+       when the first model does not add up (for example spot pairs not quoted in USDC).
+    3. ``failed``: neither adds up; balance-based markers are discarded.
+
+    Builder-deployed markets settle in their own accounts, outside both snapshots, so
+    their results never enter the balance (money moved to them counts as leaving).
+    Returns (balance curve, ledger used, harm markers, model).
+    """
+    anchor = _anchor(raw)
+    main_fills, main_funding = default_dex_only(fills), default_dex_only(funding)
+    spot = raw.get("spot_state")
+    if anchor is not None and spot:
+        led_w = use_wallet_flows(ledger)
+        bal_w = balance_curve(main_fills, led_w, main_funding, anchor_balance=anchor + spot_usdc(spot),
+                              extra_cash=spot_cash_frame(raw.get("fills", [])))
+        harm_w = mk.harm(bal_w, led_w, window_start)
+        if harm_w["balance_consistent"] == 1.0:
+            return bal_w, led_w, harm_w, "perp+spot"
+    bal = balance_curve(main_fills, ledger, main_funding, anchor_balance=anchor)
+    harm = mk.harm(bal, ledger, window_start)
+    if harm["balance_consistent"] == 1.0:
+        return bal, ledger, harm, "perp"
+    return bal, ledger, harm, "failed"
 
 
 def wallet_features(
@@ -59,21 +103,21 @@ def wallet_features(
     # Sessions are built from the trader's own actions (taker orders), not from resting
     # limit orders that fill while they are away.
     sess = sessions(active_orders(fills), m["sessions"]["gap_min"])
-    anchor = _anchor(raw)
-    # The account snapshot covers only the default perp account, so the balance and
-    # leverage are rebuilt from that account's fills and funding (builder-deployed
-    # markets settle elsewhere). Behavioural markers still use every perp market.
+    window_start = (raw.get("meta") or {}).get("start_ms")
+    if window_start is None:
+        window_start = int(fills["time"].min())
+    bal, ledger_used, harm, model = reconstruct_balance(raw, fills, ledger, funding, int(window_start))
     main_fills = default_dex_only(fills)
-    bal = balance_curve(main_fills, ledger, default_dex_only(funding), anchor_balance=anchor)
     expo = exposure_series(main_fills, bal)
     liqs = liquidation_times(fills, ledger)
 
-    row["balance_anchored"] = anchor is not None
+    row["balance_anchored"] = _anchor(raw) is not None
+    row["balance_model"] = model
     row["builder_perp_share"] = float(1 - len(main_fills) / len(fills))
     row.update(mk.activity(fills, trips))
     row.update(mk.loss_chasing(trips, m["loss_chasing"]["reentry_window_min"], m["loss_chasing"]["min_events"]))
     row["streak_escalation_ratio"] = mk.streak_escalation(trips, m["loss_streak"]["min_streak"])
-    row.update(mk.redeposit_after_liquidation(liqs, ledger, m["liquidation"]["redeposit_window_h"]))
+    row.update(mk.redeposit_after_liquidation(liqs, ledger_used, m["liquidation"]["redeposit_window_h"]))
     row.update(mk.tolerance(trips, expo))
     row.update(mk.session_markers(fills, sess, trips))
     row.update(mk.time_of_day(fills, m["rest_window"]["width_h"], m["rest_window"]["no_rest_threshold"]))
@@ -81,11 +125,8 @@ def wallet_features(
     row.update(mk.relapse(trips, m["relapse"]["break_days"], m["relapse"]["before_days"], m["relapse"]["after_days"]))
     row.update(mk.position_management(trips))
     row["lottery_share"] = mk.lottery_share(fills, cfg["study"]["major_coins"])
-    window_start = (raw.get("meta") or {}).get("start_ms")
-    if window_start is None:
-        window_start = int(fills["time"].min())
-    row.update(mk.harm(bal, ledger, int(window_start)))
-    if row.get("balance_consistent") == 0.0:
+    row.update(harm)
+    if model == "failed":
         # Missing money flows make every balance-based marker unreliable for this wallet.
         for key in ("median_eff_leverage", "leverage_trend_weekly"):
             row[key] = float("nan")

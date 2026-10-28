@@ -16,8 +16,8 @@ It turns raw fills into 21 behavioural markers, each mapped to a DSM-5
 gambling-disorder criterion, and validates every marker on synthetic traders whose
 behaviour is known before touching real data.
 
-> Status: pilot (v0.2). Pipeline, markers, tests and synthetic validation are done, and the
-> first run on real wallets is complete; v0.2 fixes three issues it surfaced.
+> Status: pilot (v0.3). Pipeline, markers, tests and synthetic validation are done, and the
+> first runs on real wallets are complete; v0.2 and v0.3 fix the issues they surfaced.
 > Next: a larger real-wallet sample. See [docs/roadmap.md](docs/roadmap.md).
 
 ## Research questions
@@ -45,8 +45,10 @@ flowchart LR
 
 **Round trip** (one position from open to flat) is the unit of a bet. The **balance
 curve** is rebuilt backwards from the live account value, which turns position size
-into effective leverage; wallets whose public money flows do not add up are flagged and
-their balance-based markers discarded. Time-use markers (sessions, rest window) count
+into effective leverage. The balance covers perp and spot USDC together, so it holds in
+Hyperliquid's unified-account and portfolio-margin modes, where spot USDC backs perp
+positions; wallets whose public money flows still do not add up are flagged and their
+balance-based markers discarded. Time-use markers (sessions, rest window) count
 only the trader's own **taker orders**, one per order, so resting limit orders that fill
 overnight and one order sweeping several price levels are not mistaken for activity.
 Wallets are identified by a salted hash from the moment data leaves the raw layer.

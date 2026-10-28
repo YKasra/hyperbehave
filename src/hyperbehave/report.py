@@ -156,7 +156,9 @@ def data_quality(features: pd.DataFrame, inc: pd.DataFrame) -> pd.DataFrame:
     rows = [
         ("included wallets", float(len(inc))),
         ("share with balance anchored to the live account", share(inc, "balance_anchored")),
-        ("share with consistent money flows", share(inc, "balance_consistent", 1.0)),
+        ("share balanced with perp + spot USDC", share(inc, "balance_model", "perp+spot")),
+        ("share balanced with the perp account only (no spot snapshot)", share(inc, "balance_model", "perp")),
+        ("share whose money flows do not add up", share(inc, "balance_model", "failed")),
         ("share with volatility marker computed", float(inc["volatility_reactivity"].notna().mean()) if "volatility_reactivity" in inc and len(inc) else float("nan")),
         ("median orders per active day", float(inc["orders_per_day"].median()) if "orders_per_day" in inc and len(inc) else float("nan")),
         ("median days of activity", float(inc["active_days"].median()) if "active_days" in inc and len(inc) else float("nan")),

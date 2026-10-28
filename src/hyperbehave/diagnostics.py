@@ -7,7 +7,8 @@ the pieces that usually explain a gap are printed side by side:
   default perp account;
 * USDC held on the spot side, which can back perp positions in unified or portfolio
   margin modes without any transfer showing in the ledger;
-* how far below zero the rebuilt balance goes, compared with the money at stake;
+* how far below zero the rebuilt balance goes, compared with the money at stake, under
+  the best balance model that was tried (``perp``, then ``perp+spot``);
 * the ledger event types present.
 
 Run ``hyperbehave diagnose`` and paste the output when asking for help: it contains no
@@ -22,9 +23,8 @@ from typing import Any
 
 import pandas as pd
 
-from hyperbehave.features import _anchor
+from hyperbehave.features import _anchor, reconstruct_balance
 from hyperbehave.normalize import (
-    default_dex_only,
     fills_to_frame,
     funding_to_frame,
     is_builder_perp,
@@ -32,7 +32,6 @@ from hyperbehave.normalize import (
     ledger_to_frame,
     spot_usdc,
 )
-from hyperbehave.reconstruct import balance_curve
 
 
 def wallet_diagnosis(address: str, raw: dict[str, Any], min_fills: int = 50) -> dict[str, Any] | None:
@@ -46,21 +45,21 @@ def wallet_diagnosis(address: str, raw: dict[str, Any], min_fills: int = 50) -> 
     ledger = ledger_to_frame(raw.get("ledger", []), address)
     funding = funding_to_frame(raw.get("funding", []))
     anchor = _anchor(raw)
-    bal = balance_curve(default_dex_only(fills), ledger, default_dex_only(funding), anchor_balance=anchor)
     start = (raw.get("meta") or {}).get("start_ms") or (int(fills["time"].min()) if len(fills) else 0)
+    bal, _, harm, model = reconstruct_balance(raw, fills, ledger, funding, int(start))
     inside = bal.loc[bal["time"] >= start] if len(bal) else bal
-    before = bal.loc[bal["time"] < start, "balance"] if len(bal) else pd.Series(dtype=float)
-    start_bal = float(before.iloc[-1]) if len(before) else 0.0
-    inflow = float(ledger.loc[(ledger["time"] >= start) & (ledger["flow"] > 0), "flow"].sum()) if len(ledger) else 0.0
-    capital = max(start_bal, 0.0) + inflow
+    start_bal = harm["start_balance"]
+    inflow = harm["window_inflow"]
+    capital = harm["capital_at_risk"]
     min_bal = float(inside["balance"].min()) if len(inside) else float("nan")
-    pnl = float(default_dex_only(fills)["closed_pnl"].sum() - default_dex_only(fills)["fee"].sum())
+    pnl = harm["net_trading_pnl"]
     state = raw.get("state") or {}
     summary = state.get("marginSummary") or {}
     spot = raw.get("spot_state")
     types = Counter((r.get("delta") or {}).get("type", "?") for r in raw.get("ledger", []))
     return {
-        "consistent": min_bal >= -max(10.0, 0.05 * capital),
+        "consistent": model != "failed",
+        "model": model,
         "perp_fills": coins["perp"],
         "builder_fills": coins["builder"],
         "spot_fills": coins["spot"],
@@ -70,7 +69,7 @@ def wallet_diagnosis(address: str, raw: dict[str, Any], min_fills: int = 50) -> 
         "window_inflow": round(inflow, 2),
         "window_trading_pnl": round(pnl, 2),
         "min_rebuilt_balance": round(min_bal, 2),
-        "gap_vs_capital": round(-min_bal / capital, 2) if capital > 0 and min_bal < 0 else 0.0,
+        "gap_vs_capital": round(-min_bal / capital, 2) if capital and capital > 0 and min_bal < 0 else 0.0,
         "anchored": anchor is not None,
         "ledger_types": ", ".join(f"{k}:{v}" for k, v in types.most_common()),
         "state_keys": ", ".join(sorted(state.keys())),

@@ -40,7 +40,7 @@ Not markers, but needed as controls and for the frequency-only baseline:
 `total_volume`, `median_trip_notional`, `win_rate`, `maker_share`, `n_liquidations`,
 `median_redeposit_delay_h`, `net_trading_pnl`, `start_balance`, `window_inflow`, `window_outflow`,
 `capital_at_risk`, `withdraw_deposit_ratio`, `max_drawdown_usd`, `median_session_min`, `no_rest`,
-`balance_anchored`, `balance_consistent`, `builder_perp_share`.
+`balance_anchored`, `balance_consistent`, `balance_model`, `builder_perp_share`.
 
 ## Units of analysis
 
@@ -49,14 +49,16 @@ Not markers, but needed as controls and for the frequency-only baseline:
 - **Order**: all fills sharing one order id; one market order sweeping several price levels is one order.
 - **Active order**: a taker order that is not a liquidation, i.e. a decision taken at that moment. Sessions, the rest window and weekly entropy use active orders only.
 - **Session**: active orders separated by less than `sessions.gap_min` minutes (default 30).
-- **Balance curve**: realised balance after each cash event; rebuilt backwards from the live account value when the data runs up to the fetch time (`balance_anchored = True`), otherwise forwards from zero.
+- **Balance curve**: the trader's USDC on the exchange after each cash event, rebuilt backwards from the live snapshots when the data runs up to the fetch time (`balance_anchored = True`), otherwise forwards from zero. `balance_model` records which account definition was used: `perp+spot` (default perp account and spot USDC together; correct in every account mode, including unified accounts and portfolio margin where spot USDC backs perps), `perp` (fallback without a spot snapshot), or `failed` (money flows do not add up; balance-based markers discarded).
+- **Capital at risk**: balance when the window opens plus money added during it. Moves between the wallet's own perp and spot sides are not money added.
 
 ## Known limitations
 
 - Time zone is unknown for public wallets, so night trading is measured against each wallet's own quietest 5 h window (a sleep proxy), not against clock time.
 - One person can run several wallets and one wallet can be shared; Layer A treats each wallet as a unit.
 - Positions open before the window start are flagged `left_censored` and excluded from holding-time markers.
-- Effective leverage uses realised balance and ignores unrealised PnL between fills.
+- Effective leverage = open perp notional / USDC on the exchange (perp + spot under the default model), using realised balance; unrealised PnL between fills is ignored.
+- Spot trades are assumed to be quoted in USDC when rebuilding cash; wallets where this fails are caught by the consistency check. USDC borrowing under portfolio margin (`borrowLend`) is not modelled yet.
 - Spot trades are excluded; the study covers perpetual futures only.
 - Builder-deployed perps (HIP-3, `dex:COIN`) count for behavioural markers but not for the balance, because they settle in a separate margin account.
 - Stop-loss and take-profit triggers look like manual taker orders in public data.

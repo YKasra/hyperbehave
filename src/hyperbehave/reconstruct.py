@@ -180,13 +180,19 @@ def balance_curve(
     ledger: pd.DataFrame,
     funding: pd.DataFrame,
     anchor_balance: float | None = None,
+    extra_cash: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Realised balance after every cash event (flow, realised PnL, fee, funding).
+
+    ``extra_cash`` (columns ``time, delta``) adds cash movements that are neither money
+    flows nor trading results, such as USDC spent on spot purchases.
 
     Returns columns ``time, delta, balance, trading_pnl`` where ``trading_pnl`` is the
     cumulative realised result of trading only (no deposits), the basis for drawdowns.
     """
     parts = []
+    if extra_cash is not None and not extra_cash.empty:
+        parts.append(pd.DataFrame({"time": extra_cash["time"], "delta": extra_cash["delta"], "trading": False}))
     if not fills.empty:
         parts.append(pd.DataFrame({"time": fills["time"], "delta": fills["closed_pnl"] - fills["fee"],
                                    "trading": True}))
