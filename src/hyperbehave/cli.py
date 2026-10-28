@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import sys
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -46,20 +45,28 @@ def cmd_fetch(args) -> None:
     cfg = load_config(args.config)
     with open(args.addresses, newline="", encoding="utf-8") as fh:
         addresses = [row["address"].lower() for row in csv.DictReader(fh)]
-    if args.limit:
+    if args.sample:
+        import random
+
+        rng = random.Random(args.seed)
+        addresses = rng.sample(addresses, min(args.sample, len(addresses)))
+    elif args.limit:
         addresses = addresses[: args.limit]
     done = set(list_wallets(args.out)) if args.resume else set()
     todo = [a for a in addresses if a not in done]
     start, end = _window(args)
     client = HyperliquidInfoClient(cfg["api"]["base_url"], cfg["api"]["min_interval_s"], cfg["api"]["max_retries"])
-    print(f"Fetching {len(todo)} wallets ({len(done)} already on disk)")
+    print(f"Fetching {len(todo)} wallets ({len(done)} already on disk). Ctrl+C is safe; rerun with --resume.")
+    t0 = time.monotonic()
     for i, addr in enumerate(todo, 1):
         try:
-            save_wallet(args.out, addr, client.fetch_wallet(addr, start, end))
+            data = client.fetch_wallet(addr, start, end)
+            save_wallet(args.out, addr, data)
+            note = f"{len(data['fills'])} fills, {len(data['ledger'])} ledger events"
         except HyperliquidAPIError as exc:
-            print(f"  skip {addr[:10]}...: {exc}", file=sys.stderr)
-        if i % 25 == 0 or i == len(todo):
-            print(f"  {i}/{len(todo)}")
+            note = f"skipped: {exc}"
+        per = (time.monotonic() - t0) / i
+        print(f"  {i}/{len(todo)} {addr[:10]}... {note} (about {per * (len(todo) - i) / 60:.0f} min left)")
 
 
 def cmd_candles(args) -> None:
@@ -155,7 +162,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("fetch", help="download fills, ledger, funding and state per wallet")
     sp.add_argument("--addresses", default="data/raw/addresses.csv")
     sp.add_argument("--out", default="data/raw/wallets")
-    sp.add_argument("--limit", type=int, default=0)
+    sp.add_argument("--limit", type=int, default=0, help="first N addresses (the busiest, often bots)")
+    sp.add_argument("--sample", type=int, default=0, help="random N addresses (recommended)")
+    sp.add_argument("--seed", type=int, default=42, help="random seed for --sample")
     sp.add_argument("--resume", action="store_true", help="skip wallets already on disk")
     window(sp)
     sp.set_defaults(func=cmd_fetch)

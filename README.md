@@ -92,8 +92,8 @@ hyperbehave validate
 # 2. Collect active wallets from the public trades stream (free)
 hyperbehave harvest --minutes 60
 
-# 3. Download 90 days of data for the first 500 wallets (free, about 30 min)
-hyperbehave fetch --limit 500 --days 90 --resume
+# 3. Download 90 days of data for a random 500 wallets (free; Ctrl+C safe with --resume)
+hyperbehave fetch --sample 500 --days 90 --resume
 
 # 4. Market candles for the volatility marker
 hyperbehave candles --coin BTC --days 90
