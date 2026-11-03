@@ -1,0 +1,13 @@
+behaviour,wallets,of,share,ci_low,ci_high,column,vs_chance_p
+Liquidated at least once,122,296,0.41216216216216217,0.3575610790968483,0.4690140192217306,n_liquidations,
+Re-deposited within 24 h of a liquidation (liquidated wallets),50,122,0.4098360655737705,0.3266163188646698,0.4985607291067483,redeposit_after_liq_share,
+Net trading loss over the window,200,296,0.6756756756756757,0.6203901557913479,0.7264596475714943,net_trading_pnl,
+Lost at least half of capital at risk,53,284,0.18661971830985916,0.14559868620632574,0.23600564061787202,loss_to_capital,
+Fell at least 50% from peak equity,71,284,0.25,0.20320123433814263,0.30347188031936356,max_drawdown_rel,
+Loss chasing beyond chance (p < 0.05),33,249,0.13253012048192772,0.09594784231815989,0.18027885455450665,loss_chasing_p,3.9790632472677285e-07
+Bigger positions after losses beyond chance (p < 0.05),28,249,0.11244979919678715,0.07895440163986665,0.15772184150999474,post_loss_size_p,6.146361030943082e-05
+Added to losing positions in at least half of trips,70,272,0.25735294117647056,0.20902973586097146,0.3124347568043843,doubling_down_share,
+Median effective leverage of 10x or more,43,284,0.15140845070422534,0.11439045210846753,0.19773121480833666,median_eff_leverage,
+Half or more of volume in lottery-like coins,76,296,0.25675675675675674,0.21032848687519765,0.30941793923778993,lottery_share,
+10% or more of new positions in own rest window,60,295,0.2033898305084746,0.16140611232001875,0.25299937874949774,rest_window_share,
+Holds losers longer than winners,77,243,0.3168724279835391,0.2616108283460173,0.3778340626285996,disposition_ratio,

@@ -12,7 +12,8 @@
 | 5 | Balance across account modes (unified account, portfolio margin), builder markets | done (v0.3) |
 | 6 | Larger sample (429 wallets, 296 included, 90 days) | done |
 | 6 | Paper analysis: prevalence, reliability, co-occurrence, harm link | done (v0.4) |
-| 7 | Working paper draft | next |
+| 7 | Pilot results published in the repo (reports/pilot_2026-11) | done |
+| 7 | Working paper draft | in review |
 | 7 | Event study around a large market drop | |
 | 7 to 8 | Working paper and preprint, tagged v1.0 release with a DOI | |
 

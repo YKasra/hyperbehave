@@ -1,0 +1,10 @@
+marker,label,n,split_half_r,spearman_brown
+loss_chasing_index,Loss chasing (re-entry),185,0.28650240208640493,0.4453973838241814
+post_loss_size_ratio,Bigger size after losses,185,0.26402045077867575,0.4177471189109812
+doubling_down_share,Doubling down on losers,237,0.9422744866147021,0.9702794255996685
+disposition_ratio,Holding losers longer,183,0.6122731509402929,0.7595154091392138
+rest_window_share,Trading in own rest window,280,0.7105209172884029,0.8307655406105804
+hour_week_entropy,Spread over the week,280,0.8896958114523541,0.9416286008154562
+sessions_per_active_day,Sessions per day,296,0.847837986112204,0.917654028637034
+median_eff_leverage,Effective leverage,283,0.9609766712446696,0.9801000545658906
+lottery_share,Lottery-like coins,296,0.9471325223067395,0.9728485467282786

@@ -16,20 +16,52 @@ It turns raw fills into 21 behavioural markers, each mapped to a DSM-5
 gambling-disorder criterion, and validates every marker on synthetic traders whose
 behaviour is known before touching real data.
 
-> Status: pilot (v0.4). Pipeline, markers, tests and synthetic validation are done, and a
-> 90-day sample of 429 real wallets has been collected. v0.4 adds the full paper analysis:
-> prevalence, split-half reliability, co-occurrence and links to financial harm.
-> Next: working paper. See [docs/roadmap.md](docs/roadmap.md).
+> Status: pilot complete (v0.4). Real data collected from 429 wallets (296 analysed, 90 days,
+> November 2026); results below. Working paper in preparation. See
+> [docs/roadmap.md](docs/roadmap.md).
 
 ## Research questions
 
 1. How common are gambling-like trading patterns among active Hyperliquid wallets?
-2. Do these patterns co-occur, the way symptoms of a disorder do, or appear in isolation?
-3. Are they associated with financial harm (losses relative to deposits, drawdowns, liquidations)?
+2. Can they be measured reliably from public transaction data?
+3. Do these patterns co-occur, the way symptoms of a disorder do, and are they associated
+   with financial harm (losses, drawdowns, liquidations)?
 
 This is a descriptive study of public data. It does not diagnose anyone. A planned
 follow-up (Layer B) links consenting traders' wallets to validated questionnaires
 such as the Trading Disorder Scale; see [docs/ethics.md](docs/ethics.md).
+
+## First results (pilot, November 2026)
+
+296 active wallets after removing bots, market makers and thin accounts; 90 days of
+trading each. Full tables and figures: [reports/pilot_2026-11](reports/pilot_2026-11/results.md).
+
+**1. Gambling-like behaviour is common.** Over 90 days, 68% of wallets lost money and 41%
+were liquidated at least once. Of those liquidated, 41% deposited new money within 24 hours
+of a liquidation. 13% chased losses beyond what chance would produce (5% expected,
+p < 0.001), and chasing by speed and by size clustered in the same wallets (odds ratio 3.9).
+
+![Share of wallets showing each behaviour](reports/pilot_2026-11/fig1_prevalence.png)
+
+**2. Most markers are reliable.** Seven of nine markers rank wallets the same way on even
+and odd days (split-half reliability 0.76 to 0.98). The two loss-chasing markers are noisier
+over 90 days (0.42 to 0.45).
+
+**3. But the behaviours do not form one syndrome.** Despite their reliability, the markers
+are nearly unrelated to each other (mean partial correlation 0.01), and wallets extreme on
+several markers at once are no more common than chance (2.7% vs 3.0% expected).
+
+![Partial correlations among markers](reports/pilot_2026-11/fig3_cooccurrence.png)
+
+**4. Leverage is what separates the harmed.** Effective leverage is the only marker
+strongly tied to drawdown (Spearman 0.66), losses (0.50) and liquidation (0.36).
+
+![Leverage and drawdown](reports/pilot_2026-11/fig5_leverage_drawdown.png)
+
+**What this means.** Gambling-like trading can be measured directly from public on-chain
+records, and it is common and stable within individuals. But behaviour alone cannot tell a
+reckless trader from one with a problem. Linking on-chain behaviour to validated clinical
+scales (Layer B) is the necessary next step.
 
 ## How it works
 
