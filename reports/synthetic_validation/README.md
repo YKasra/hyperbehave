@@ -23,8 +23,8 @@ AUC = probability that a random gambler scores higher than a random non-gambler 
 | max_session_min | 0.911 | 1.000 |  |
 | loss_to_capital | 0.895 | 1.000 |  |
 | size_trend_weekly | 0.812 | 1.000 |  |
-| volatility_reactivity | 0.601 | 1.000 | no reaction to market shocks was programmed |
 | relapse_count | 0.600 | 1.000 | breaks happen only after rare full ruin |
+| volatility_reactivity | 0.532 | 1.000 | no reaction to market shocks was programmed |
 | leverage_trend_weekly | 0.500 | 1.000 | leverage is fixed per simulated trader |
 | streak_escalation_ratio | 0.398 | 0.833 | simulated losing streaks mostly end in ruin and a smaller fresh deposit, which caps the next size |
 | house_money_ratio | 0.066 | 1.000 | simulated gamblers reset size after a win by design |
@@ -51,7 +51,7 @@ AUC = probability that a random gambler scores higher than a random non-gambler 
 | doubling_down_share | 0.000 | 0.000 | 0.242 |
 | disposition_ratio | 0.746 | 1.000 | 3.990 |
 | house_money_ratio | 1.003 | 1.008 | 0.948 |
-| volatility_reactivity | 0.900 | 0.962 | 1.143 |
+| volatility_reactivity | 0.985 | 0.912 | 1.021 |
 | relapse_count | 0.000 | 0.000 | 0.000 |
 | relapse_size_ratio |  |  | 0.529 |
 | lottery_share | 0.099 | 0.390 | 0.739 |

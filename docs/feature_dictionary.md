@@ -26,12 +26,17 @@ Core markers (used for the multi-marker high-risk screen) are marked with **core
 | `doubling_down_share` **core** | Chasing losses | Share of positions that were increased while under water | more gambling-like |
 | `disposition_ratio` | Behavioural bias (disposition effect) | Median holding time of losing trips / winning trips | more gambling-like |
 | `house_money_ratio` | Behavioural bias (house money) | Median size of the next position after a gain / median position size | more gambling-like |
-| `volatility_reactivity` | Impulsivity | New positions per hour after market shocks / baseline rate | more gambling-like |
+| `volatility_reactivity` | Impulsivity | New positions in the 2 h after market shocks / same time of day on the surrounding 14 days | more gambling-like |
 | `relapse_count` | Unsuccessful efforts to stop | Breaks of N days or more followed by a return | more gambling-like |
 | `relapse_size_ratio` | Unsuccessful efforts to stop, tolerance | Position size after returning from a break / before it | more gambling-like |
 | `lottery_share` | Gambling-like asset choice | Share of traded notional outside the major coins | more gambling-like |
-| `loss_to_capital` **core** | Harm, jeopardised finances | Net trading loss in the window / capital at risk (balance at window start + money added; 0 when profitable) | more gambling-like |
+| `loss_to_capital` **core** | Harm, jeopardised finances | Net trading loss in the window / capital at risk (balance at window start + money added + net spot sales; 0 when profitable) | more gambling-like |
 | `max_drawdown_rel` | Harm, jeopardised finances | Worst fall of trading equity (capital at risk + cumulative result) from its running peak, as a share of the peak | more gambling-like |
+
+## Statistical companions
+
+- `loss_chasing_p`, `post_loss_size_p`: per-wallet permutation tests (500 shuffles of the wallet's own win/loss labels). One-sided p-value that the wallet re-enters more often, or with bigger positions, after losses than chance would produce. Across wallets, the share with p < 0.05 is compared with the 5% expected by chance.
+- `<marker>_h0`, `<marker>_h1`: the marker computed separately on even and odd calendar days (UTC), for split-half reliability. Computed for loss chasing, post-loss size, doubling down, disposition, rest window, weekly spread, sessions per day, effective leverage and lottery share.
 
 ## Activity covariates
 

@@ -192,16 +192,19 @@ def balance_curve(
     """
     parts = []
     if extra_cash is not None and not extra_cash.empty:
-        parts.append(pd.DataFrame({"time": extra_cash["time"], "delta": extra_cash["delta"], "trading": False}))
+        parts.append(pd.DataFrame({"time": extra_cash["time"], "delta": extra_cash["delta"],
+                                   "trading": False, "kind": "spot"}))
     if not fills.empty:
         parts.append(pd.DataFrame({"time": fills["time"], "delta": fills["closed_pnl"] - fills["fee"],
-                                   "trading": True}))
+                                   "trading": True, "kind": "trade"}))
     if not funding.empty:
-        parts.append(pd.DataFrame({"time": funding["time"], "delta": funding["usdc"], "trading": True}))
+        parts.append(pd.DataFrame({"time": funding["time"], "delta": funding["usdc"], "trading": True,
+                                   "kind": "funding"}))
     if not ledger.empty:
-        parts.append(pd.DataFrame({"time": ledger["time"], "delta": ledger["flow"], "trading": False}))
+        parts.append(pd.DataFrame({"time": ledger["time"], "delta": ledger["flow"], "trading": False,
+                                   "kind": "flow"}))
     if not parts:
-        return pd.DataFrame(columns=["time", "delta", "balance", "trading_pnl"])
+        return pd.DataFrame(columns=["time", "delta", "balance", "trading_pnl", "kind"])
     ev = pd.concat(parts, ignore_index=True).sort_values("time", kind="mergesort")
     ev["trading_pnl"] = ev["delta"].where(ev["trading"], 0.0).cumsum()
     cum = ev["delta"].cumsum()
@@ -209,7 +212,7 @@ def balance_curve(
         ev["balance"] = anchor_balance - (cum.iloc[-1] - cum)
     else:
         ev["balance"] = cum
-    return ev[["time", "delta", "balance", "trading_pnl"]].reset_index(drop=True)
+    return ev[["time", "delta", "balance", "trading_pnl", "kind"]].reset_index(drop=True)
 
 
 def exposure_series(fills: pd.DataFrame, balance: pd.DataFrame) -> pd.DataFrame:

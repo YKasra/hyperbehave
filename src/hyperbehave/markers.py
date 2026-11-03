@@ -63,7 +63,7 @@ MARKERS: list[MarkerSpec] = [
     MarkerSpec("house_money_ratio", "Behavioural bias (house money)",
                "Median size of the next position after a gain / median position size", "higher"),
     MarkerSpec("volatility_reactivity", "Impulsivity",
-               "New positions per hour after market shocks / baseline rate", "higher"),
+               "New positions in the 2 h after market shocks / same time of day on the surrounding 14 days", "higher"),
     MarkerSpec("relapse_count", "Unsuccessful efforts to stop",
                "Breaks of N days or more followed by a return", "higher"),
     MarkerSpec("relapse_size_ratio", "Unsuccessful efforts to stop, tolerance",
@@ -71,7 +71,7 @@ MARKERS: list[MarkerSpec] = [
     MarkerSpec("lottery_share", "Gambling-like asset choice",
                "Share of traded notional outside the major coins", "higher"),
     MarkerSpec("loss_to_capital", "Harm, jeopardised finances",
-               "Net trading loss in the window / capital at risk (balance at window start + money added; 0 when profitable)", "higher"),
+               "Net trading loss in the window / capital at risk (balance at window start + money added + net spot sales; 0 when profitable)", "higher"),
     MarkerSpec("max_drawdown_rel", "Harm, jeopardised finances",
                "Worst fall of trading equity (capital at risk + cumulative result) from its running peak, as a share of the peak", "higher"),
 ]
@@ -99,8 +99,18 @@ def _ratio(a: float, b: float) -> float:
 
 
 # ----------------------------------------------------------------------- chasing
-def loss_chasing(trips: pd.DataFrame, window_min: float = 60, min_events: int = 5) -> dict[str, float]:
-    out = {"loss_chasing_index": NAN, "post_loss_size_ratio": NAN, "house_money_ratio": NAN}
+def loss_chasing(trips: pd.DataFrame, window_min: float = 60, min_events: int = 5,
+                 n_perm: int = 500) -> dict[str, float]:
+    """Loss chasing: faster and bigger re-entry after losing trips than after winning ones.
+
+    Besides the point estimates, a per-wallet permutation test shuffles the win/loss
+    labels across the wallet's own trips ``n_perm`` times. ``loss_chasing_p`` is the
+    one-sided p-value for "re-enters more often after losses than chance", and
+    ``post_loss_size_p`` the same for "the next position is bigger after losses". Across
+    many wallets, the share with p < 0.05 can be compared with the 5% expected by chance.
+    """
+    out = {"loss_chasing_index": NAN, "post_loss_size_ratio": NAN, "house_money_ratio": NAN,
+           "loss_chasing_p": NAN, "post_loss_size_p": NAN}
     if len(trips) < 2:
         return out
     opens = np.sort(trips["open_time"].to_numpy(dtype=np.int64))
@@ -108,23 +118,34 @@ def loss_chasing(trips: pd.DataFrame, window_min: float = 60, min_events: int = 
     sizes_by_open = trips["entry_notional"].to_numpy(dtype=float)[order]
     w = int(window_min * MS_MIN)
 
-    reentry, next_size, outcome = [], [], []
-    for close, pnl in zip(trips["close_time"].to_numpy(dtype=np.int64), trips["net_pnl"].to_numpy(dtype=float), strict=True):
-        if pnl == 0:
-            continue
-        i = np.searchsorted(opens, close, side="left")
-        j = np.searchsorted(opens, close + w, side="right")
-        reentry.append(j > i)
-        next_size.append(sizes_by_open[i] if i < len(opens) else NAN)
-        outcome.append(pnl < 0)
-    reentry = np.asarray(reentry)
-    next_size = np.asarray(next_size, dtype=float)
-    loss = np.asarray(outcome, dtype=bool)
-    if loss.sum() >= min_events and (~loss).sum() >= min_events:
+    closes = trips["close_time"].to_numpy(dtype=np.int64)
+    pnls = trips["net_pnl"].to_numpy(dtype=float)
+    keep = pnls != 0
+    closes, pnls = closes[keep], pnls[keep]
+    i = np.searchsorted(opens, closes, side="left")
+    j = np.searchsorted(opens, closes + w, side="right")
+    reentry = (j > i).astype(float)
+    next_size = np.where(i < len(opens), sizes_by_open[np.minimum(i, len(opens) - 1)], np.nan)
+    loss = pnls < 0
+    n_loss, n_gain = int(loss.sum()), int((~loss).sum())
+    if n_loss >= min_events and n_gain >= min_events:
         out["loss_chasing_index"] = float(reentry[loss].mean() - reentry[~loss].mean())
         out["post_loss_size_ratio"] = _ratio(_median(next_size[loss]), _median(next_size[~loss]))
+    if n_loss >= min_events and n_gain >= min_events and n_perm > 0:
+        rng = np.random.default_rng(len(pnls))
+        perm_lci = np.empty(n_perm)
+        perm_size = np.empty(n_perm)
+        log_size = np.log(np.where(next_size > 0, next_size, np.nan))
+        obs_size = np.nanmedian(log_size[loss]) - np.nanmedian(log_size[~loss])
+        for k in range(n_perm):
+            lab = rng.permutation(loss)
+            perm_lci[k] = reentry[lab].mean() - reentry[~lab].mean()
+            perm_size[k] = np.nanmedian(log_size[lab]) - np.nanmedian(log_size[~lab])
+        out["loss_chasing_p"] = float((1 + np.sum(perm_lci >= out["loss_chasing_index"])) / (n_perm + 1))
+        if np.isfinite(obs_size):
+            out["post_loss_size_p"] = float((1 + np.sum(perm_size >= obs_size)) / (n_perm + 1))
     overall = _median(trips["entry_notional"])
-    if (~loss).sum() >= min_events:
+    if n_gain >= min_events:
         out["house_money_ratio"] = _ratio(_median(next_size[~loss]), overall)
     return out
 
@@ -264,21 +285,43 @@ def time_of_day(fills: pd.DataFrame, width_h: int = 5, no_rest_threshold: float 
     return out
 
 
-def volatility_reactivity(trips: pd.DataFrame, shock_times: np.ndarray | None, window_h: float = 2) -> float:
+def volatility_reactivity(trips: pd.DataFrame, shock_times: np.ndarray | None, window_h: float = 2,
+                          baseline_days: int = 7) -> float:
+    """New positions after market shocks relative to the same time of day on normal days.
+
+    Large market moves cluster in busy trading hours, when most people trade more anyway.
+    The baseline is therefore the wallet's own count of new positions in the same
+    ``window_h`` window on the ``baseline_days`` days before and after each shock,
+    skipping windows that overlap another shock.
+    """
     if trips.empty or shock_times is None or len(shock_times) == 0:
         return NAN
     opens = np.sort(trips["open_time"].to_numpy(dtype=np.int64))
-    span_h = (opens[-1] - opens[0]) / MS_H
-    if span_h < 24 or len(opens) < 10:
+    if (opens[-1] - opens[0]) / MS_H < 24 or len(opens) < 10:
         return NAN
-    shocks = shock_times[(shock_times >= opens[0]) & (shock_times <= opens[-1])]
+    shocks = np.sort(shock_times[(shock_times >= opens[0]) & (shock_times <= opens[-1])])
     if len(shocks) < 3:
         return NAN
     w = int(window_h * MS_H)
-    after = sum(np.searchsorted(opens, s + w, "right") - np.searchsorted(opens, s, "left") for s in shocks)
-    rate_after = after / (len(shocks) * window_h)
-    base = len(opens) / span_h
-    return _ratio(rate_after, base)
+
+    def count(t0: int) -> int:
+        return int(np.searchsorted(opens, t0 + w, "left") - np.searchsorted(opens, t0, "left"))
+
+    after, base, n_base = 0, 0, 0
+    for s0 in shocks:
+        after += count(int(s0))
+        for k in [*range(-baseline_days, 0), *range(1, baseline_days + 1)]:
+            t0 = int(s0) + k * MS_DAY
+            if t0 < opens[0] or t0 + w > opens[-1]:
+                continue
+            near = np.searchsorted(shocks, t0 + w, "left") - np.searchsorted(shocks, t0 - w, "left")
+            if near:
+                continue
+            base += count(t0)
+            n_base += 1
+    if n_base == 0:
+        return NAN
+    return _ratio(after / len(shocks), base / n_base)
 
 
 def relapse(trips: pd.DataFrame, break_days: int = 14, before_days: int = 30, after_days: int = 7) -> dict[str, float]:
@@ -310,6 +353,8 @@ def position_management(trips: pd.DataFrame) -> dict[str, float]:
         return out
     if len(trips) >= 10:
         out["doubling_down_share"] = float((trips["n_adverse_adds"] > 0).mean())
+    # Positions open before the window have unknown duration. Liquidated trips stay in:
+    # letting a loser run until it is liquidated is the behaviour this marker targets.
     clean = trips[~trips["left_censored"]]
     losers = clean.loc[clean["net_pnl"] < 0, "duration_min"]
     winners = clean.loc[clean["net_pnl"] > 0, "duration_min"]
@@ -332,7 +377,7 @@ def harm(balance: pd.DataFrame, ledger: pd.DataFrame, window_start: int | None =
     """Financial harm within the study window, relative to the money at stake.
 
     Capital at risk = realised balance when the window opens + money added during the
-    window. Using lifetime deposits instead would mix a 90-day loss with years of
+    window + net USDC raised by selling spot tokens in the window. Using lifetime deposits instead would mix a 90-day loss with years of
     history. ``balance_consistent`` is False when the reconstructed balance goes clearly
     negative, which means some money flows are missing from the public ledger (for
     example funds moved in through a channel the ledger does not show). Callers should
@@ -354,7 +399,11 @@ def harm(balance: pd.DataFrame, ledger: pd.DataFrame, window_start: int | None =
         inflow, outflow = float(lw[lw > 0].sum()), float(-lw[lw < 0].sum())
     else:
         inflow = outflow = 0.0
-    capital = max(start_bal, 0.0) + inflow
+    # USDC raised by selling spot tokens inside the window is also money put to work.
+    spot_net = 0.0
+    if "kind" in inside:
+        spot_net = float(inside.loc[inside["kind"] == "spot", "delta"].sum())
+    capital = max(start_bal, 0.0) + inflow + max(spot_net, 0.0)
 
     # Cumulative trading result since the window opened (pre-window rows hold only
     # ledger flows, but subtract their trading_pnl anyway to be exact).
@@ -365,7 +414,7 @@ def harm(balance: pd.DataFrame, ledger: pd.DataFrame, window_start: int | None =
     net = float(curve[-1])
     # Relative drawdown: worst fall of trading equity (capital + cumulative result)
     # from its running peak, as a share of that peak. Bounded at 1 when equity >= 0.
-    equity = max(start_bal, 0.0) + inflow + curve
+    equity = capital + curve
     peak = np.maximum.accumulate(equity)
     with np.errstate(divide="ignore", invalid="ignore"):
         rel = np.where(peak > 0, (peak - equity) / peak, 0.0)

@@ -10,9 +10,9 @@
 | 5 | Harvest a first wallet sample and fetch 90 days of data | done (30 wallets) |
 | 5 | Fix issues surfaced by real data: order sweeps, window capital, passive fills | done (v0.2) |
 | 5 | Balance across account modes (unified account, portfolio margin), builder markets | done (v0.3) |
-| 6 | Larger sample (several hundred wallets) | next |
-| 6 | Layer A report on real wallets: prevalence, co-occurrence, profiles | |
-| 6 | Harm link: do high-chasing wallets get liquidated more or lose more? | |
+| 6 | Larger sample (429 wallets, 296 included, 90 days) | done |
+| 6 | Paper analysis: prevalence, reliability, co-occurrence, harm link | done (v0.4) |
+| 7 | Working paper draft | next |
 | 7 | Event study around a large market drop | |
 | 7 to 8 | Working paper and preprint, tagged v1.0 release with a DOI | |
 

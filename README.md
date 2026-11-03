@@ -16,9 +16,10 @@ It turns raw fills into 21 behavioural markers, each mapped to a DSM-5
 gambling-disorder criterion, and validates every marker on synthetic traders whose
 behaviour is known before touching real data.
 
-> Status: pilot (v0.3). Pipeline, markers, tests and synthetic validation are done, and the
-> first runs on real wallets are complete; v0.2 and v0.3 fix the issues they surfaced.
-> Next: a larger real-wallet sample. See [docs/roadmap.md](docs/roadmap.md).
+> Status: pilot (v0.4). Pipeline, markers, tests and synthetic validation are done, and a
+> 90-day sample of 429 real wallets has been collected. v0.4 adds the full paper analysis:
+> prevalence, split-half reliability, co-occurrence and links to financial harm.
+> Next: working paper. See [docs/roadmap.md](docs/roadmap.md).
 
 ## Research questions
 
@@ -108,6 +109,9 @@ hyperbehave candles --coin BTC --days 90
 hyperbehave features
 hyperbehave describe
 
+# 6. Every table and figure for the working paper (reports/paper/results.md)
+hyperbehave paper
+
 # Optional checks (no addresses in the output)
 hyperbehave inspect     # counts of event types in the raw data
 hyperbehave diagnose    # why a wallet's money flows do not add up
@@ -135,6 +139,7 @@ src/hyperbehave/
   features.py      one row of markers per wallet
   synthetic.py     agent-based synthetic traders in API format
   analysis.py      prevalence screen, co-occurrence, AUC, behavioural profiles
+  paper.py         all tables and figures for the working paper
   report.py        Markdown and figure reports
   cli.py           command line entry point
 docs/              feature dictionary, data sources, ethics, roadmap

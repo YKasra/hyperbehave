@@ -147,6 +147,13 @@ def cmd_describe(args) -> None:
     print(f"Layer A report -> {path}")
 
 
+def cmd_paper(args) -> None:
+    from hyperbehave.paper import paper_report
+
+    path = paper_report(pd.read_parquet(args.features), args.out, n_perm=args.permutations)
+    print(f"Paper tables and figures -> {path.parent}")
+
+
 def cmd_inspect(args) -> None:
     """Aggregate counts of event types in the raw data (no addresses), for checking
     that every ledger and fill type is parsed."""
@@ -270,6 +277,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--out", default="reports/layer_a")
     sp.add_argument("--no-profiles", action="store_true")
     sp.set_defaults(func=cmd_describe)
+
+    sp = sub.add_parser("paper", help="all tables and figures for the working paper")
+    sp.add_argument("--features", default="data/processed/features.parquet")
+    sp.add_argument("--out", default="reports/paper")
+    sp.add_argument("--permutations", type=int, default=2000)
+    sp.set_defaults(func=cmd_paper)
 
     sp = sub.add_parser("inspect", help="count event types in the raw data (no addresses)")
     sp.add_argument("--raw", default="data/raw/wallets")

@@ -31,6 +31,47 @@ from hyperbehave.reconstruct import (
 
 ANCHOR_TOLERANCE_MS = 3_600_000
 
+# Markers whose split-half reliability is estimated (even vs odd calendar days).
+RELIABILITY_MARKERS = [
+    "loss_chasing_index", "post_loss_size_ratio", "doubling_down_share", "disposition_ratio",
+    "rest_window_share", "hour_week_entropy", "sessions_per_active_day", "median_eff_leverage",
+    "lottery_share",
+]
+
+
+def _day_parity(times) -> np.ndarray:
+    return (np.asarray(times, dtype=np.int64) // 86_400_000) % 2
+
+
+def split_half(fills: pd.DataFrame, trips: pd.DataFrame, expo: pd.DataFrame,
+               cfg: dict[str, Any]) -> dict[str, float]:
+    """Each reliability marker computed separately on even and odd calendar days.
+
+    A marker that reflects a stable trait should rank wallets the same way in both
+    halves; the correlation across wallets (with the Spearman-Brown correction) is its
+    split-half reliability. Returned as ``<marker>_h0`` and ``<marker>_h1``.
+    """
+    m = cfg["markers"]
+    out: dict[str, float] = {}
+    for h in (0, 1):
+        f = fills[_day_parity(fills["time"]) == h]
+        tr = trips[_day_parity(trips["open_time"]) == h] if len(trips) else trips
+        e = expo[_day_parity(expo["time"]) == h] if len(expo) else expo
+        vals: dict[str, float] = {}
+        vals.update(mk.loss_chasing(tr, m["loss_chasing"]["reentry_window_min"],
+                                    m["loss_chasing"]["min_events"], n_perm=0))
+        vals.update(mk.position_management(tr))
+        vals.update(mk.time_of_day(f, m["rest_window"]["width_h"], m["rest_window"]["no_rest_threshold"]))
+        if len(f):
+            vals.update(mk.session_markers(f, sessions(active_orders(f), m["sessions"]["gap_min"]), tr))
+        lev = e["eff_leverage"].to_numpy(dtype=float) if len(e) else np.array([])
+        lev = lev[np.isfinite(lev) & (lev > 0)]
+        vals["median_eff_leverage"] = float(np.median(lev)) if lev.size else float("nan")
+        vals["lottery_share"] = mk.lottery_share(f, cfg["study"]["major_coins"])
+        for key in RELIABILITY_MARKERS:
+            out[f"{key}_h{h}"] = vals.get(key, float("nan"))
+    return out
+
 
 def _anchor(raw: dict[str, Any]) -> float | None:
     """Use the account snapshot only if the data runs up to the moment it was taken."""
@@ -126,10 +167,14 @@ def wallet_features(
     row.update(mk.position_management(trips))
     row["lottery_share"] = mk.lottery_share(fills, cfg["study"]["major_coins"])
     row.update(harm)
+    halves = split_half(fills, trips, expo, cfg)
     if model == "failed":
         # Missing money flows make every balance-based marker unreliable for this wallet.
-        for key in ("median_eff_leverage", "leverage_trend_weekly"):
+        for key in ("median_eff_leverage", "leverage_trend_weekly",
+                    "median_eff_leverage_h0", "median_eff_leverage_h1"):
             row[key] = float("nan")
+            halves.pop(key, None)
+    row.update(halves)
     return row
 
 
